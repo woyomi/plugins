@@ -30,9 +30,13 @@ pnpm repo       # build all + merge dists into repo/ (index.json + bundles)
 
 ## Distributing
 
-- **Static hosting:** run `pnpm repo` and host the generated `repo/`
-  directory anywhere static (GitHub Pages, object storage, a VPS). Users add
-  the URL in the app's Plugins screen (Plugins → add repo URL).
+- **GitHub Pages (automatic):** every push to `main` rebuilds all plugins
+  and deploys the merged `repo/` directory to GitHub Pages
+  (`.github/workflows/deploy-repo.yml`). The hosted plugin repository URL
+  is **https://woyomi.github.io/plugins/** — add it in the app's Plugins
+  screen (Plugins → add repo URL).
+- **Manual static hosting:** run `pnpm repo` and host the generated `repo/`
+  directory anywhere static.
 - **woyomi server:** run `apps/server` from the woyomi repo with
   `PLUGIN_REPO_DIR=<this repo>` — the `/repo` endpoint aggregates
   `plugins/*/dist` and serves the same index format.
