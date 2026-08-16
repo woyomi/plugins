@@ -12,6 +12,6 @@
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
     "typecheck": "pnpm -r exec tsc --noEmit",
-    "repo": "pnpm run build && node scripts/build-repo.mjs"
+    "build:repo": "pnpm run build && node scripts/build-repo.mjs"
   }
 }

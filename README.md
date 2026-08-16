@@ -25,7 +25,7 @@ Requires Node >= 22 and pnpm 11.8.0.
 pnpm install
 pnpm build      # build every plugin -> plugins/<name>/dist (IIFE + manifest + sha256)
 pnpm test       # unit tests (offline, inline fixtures)
-pnpm repo       # build all + merge dists into repo/ (index.json + bundles)
+pnpm build:repo       # build all + merge dists into repo/ (index.json + bundles)
 ```
 
 ## Distributing
@@ -35,7 +35,7 @@ pnpm repo       # build all + merge dists into repo/ (index.json + bundles)
   (`.github/workflows/deploy-repo.yml`). The hosted plugin repository URL
   is **https://woyomi.github.io/plugins/** — add it in the app's Plugins
   screen (Plugins → add repo URL).
-- **Manual static hosting:** run `pnpm repo` and host the generated `repo/`
+- **Manual static hosting:** run `pnpm build:repo` and host the generated `repo/`
   directory anywhere static.
 - **woyomi server:** run `apps/server` from the woyomi repo with
   `PLUGIN_REPO_DIR=<this repo>` — the `/repo` endpoint aggregates
@@ -50,7 +50,7 @@ see updates (installs are sha256- and apiVersion-gated).
    `@woyomi/plugin-<yoursource>` (use an existing plugin as a template).
 2. Implement the `Source` interface (see the woyomi README's plugin guide)
    and register via `globalThis.__media_plugin_register`.
-3. `pnpm build && pnpm test`, then `pnpm repo` to publish.
+3. `pnpm build && pnpm test`, then `pnpm build:repo` to publish.
 
 ## License
 
