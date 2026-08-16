@@ -8,9 +8,15 @@ source plugins live.
 ## Layout
 
 ```
-plugins/mangadex        MangaDex source (manga; official public API)
+plugins/animefire       AnimeFire (anime, pt-BR)
+plugins/animesonlinecc  Animes Online CC (anime, pt-BR)
+plugins/animesorion     Animes Orion (anime + movies, pt-BR)
+plugins/betteranime     Better Anime (anime, pt-BR)
+plugins/subanimes       SubAnimes (anime, pt-BR)
+plugins/mugiwaras       Mugiwaras (manga, pt-BR)
+plugins/mangadex        MangaDex (manga, multi-language; official public API)
+plugins/comick          Comick (manga, multi-language)
 plugins/tsundoku        Tsundoku Traduções (manga + novel, pt-BR)
-plugins/animefire       AnimeFire (anime)
 scripts/build-repo.mjs  merges all plugin dists into repo/
 ```
 
