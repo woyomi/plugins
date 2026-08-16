@@ -1,0 +1,19 @@
+{
+  "name": "@woyomi/plugin-animefire",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "woyomi-plugin-build . dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@woyomi/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "@woyomi/plugin-builder": "^0.1.0",
+    "linkedom": "^0.18.13",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
+  }
+}
