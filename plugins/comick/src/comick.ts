@@ -182,14 +182,25 @@ function altTitles(data: ComicData): string[] | undefined {
 }
 
 function mapBrowse(comic: BrowseComic): Media {
-  return {
+  return withCoverHeaders({
     id: `${sourceId}/${comic.slug}`,
     mediaId: comic.slug,
     sourceId,
     title: comic.title || comic.slug,
     type: 'manga',
     coverUrl: comic.default_thumbnail || undefined
-  }
+  })
+}
+
+/**
+ * Comick cover files live on `cdn1.comicknew.pictures` and 403 without
+ * `Referer: https://comick.art/` (Cloudflare hotlink protection). Media.coverUrl
+ * is otherwise just a URL with no way to carry request headers, so attach the
+ * same undocumented `headers` the core/app image loader already reads on chapter
+ * content — the host sends it when it loads the cover.
+ */
+function withCoverHeaders(media: Media): Media & { headers: Record<string, string> } {
+  return { ...media, headers: { Referer: `${BASE}/` } }
 }
 
 /**
@@ -248,7 +259,7 @@ export function makeComickSource(): Source {
         const name = genre.md_genres?.name?.trim()
         if (name) tags.push(name)
       }
-      return {
+      return withCoverHeaders({
         id: `${sourceId}/${data.slug || mediaId}`,
         mediaId,
         sourceId,
@@ -259,7 +270,7 @@ export function makeComickSource(): Source {
         status: mapStatus(data.status),
         altTitles: altTitles(data),
         tags: tags.length > 0 ? tags : undefined
-      }
+      })
     },
 
     async getEpisodes(ctx, mediaId): Promise<Episode[]> {

@@ -248,7 +248,17 @@ export function makeSubanimesSource(): Source {
         const parsed = parseMasterPlaylist(master)
         if (!parsed) continue
         const quality = joinQuality(heightToQuality(parsed.height), variant.label)
-        streams.push({ url: parsed.url, kind: 'hls', ...(quality ? { quality } : {}) })
+        // The /m3/ manifest is served without `Access-Control-Allow-Origin`, so a
+        // cross-origin browser HLS fetch (hls.js) is CORS-blocked and never starts.
+        // Declaring request headers routes the stream through the app's network
+        // loader (same mechanism animefire/comick use for referer-protected media)
+        // so it can pull the manifest + CORS-enabled segments natively.
+        streams.push({
+          url: parsed.url,
+          kind: 'hls',
+          ...(quality ? { quality } : {}),
+          headers: { Referer: `${BASE}/` }
+        })
       }
       return streams
     },

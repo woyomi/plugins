@@ -15,12 +15,20 @@ function text(el: Element | null | undefined): string | undefined {
 }
 
 /**
- * mediaId is the site path without slashes: "animes/<slug>" or "filmes/<slug>".
- * Keeping the type prefix lets getMedia/getEpisodes/getStreams hit the right route
- * (search returns both anime and movie cards).
+ * Media id is slash-free so the app treats it as a single routing segment
+ * (other plugin ids are plain slugs): bare `<slug>` for anime, `filme:<slug>`
+ * for movies. The site route (`/animes/<slug>/` vs `/filmes/<slug>/`) is
+ * recovered from that marker, not stored as a `/`-containing mediaId.
  */
+function mediaIdFromPath(path: string): string {
+  if (path.startsWith('filmes/')) return `filme:${path.slice('filmes/'.length)}`
+  return path.replace(/^animes\//, '')
+}
+
+/** Turn a slash-free mediaId back into the site detail URL. */
 function pageUrl(mediaId: string): string {
-  return `${BASE}/${mediaId}/`
+  if (mediaId.startsWith('filme:')) return `${BASE}/filmes/${mediaId.slice('filme:'.length)}/`
+  return `${BASE}/animes/${mediaId}/`
 }
 
 /** Normalize an href (absolute or site-relative) to a slash-less site path. */
@@ -53,7 +61,7 @@ function synopsisText(container: Element | null | undefined): string | undefined
 /** A card in the WordPress (DooPlay) search results list. */
 function mapSearchCard(item: Element): Media {
   const link = item.querySelector<HTMLAnchorElement>('.details .title a') ?? item.querySelector<HTMLAnchorElement>('.image a')
-  const mediaId = pathFromHref(link?.getAttribute('href') ?? '')
+  const mediaId = mediaIdFromPath(pathFromHref(link?.getAttribute('href') ?? ''))
   return {
     id: `${sourceId}/${mediaId}`,
     mediaId,
@@ -67,7 +75,7 @@ function mapSearchCard(item: Element): Media {
 /** A card in a homepage carousel (`article.item` with `.poster img` + `.data h3 a`). */
 function mapHomeCard(article: Element): Media {
   const link = article.querySelector<HTMLAnchorElement>('.data h3 a') ?? article.querySelector<HTMLAnchorElement>('.poster a[href]')
-  const mediaId = pathFromHref(link?.getAttribute('href') ?? '')
+  const mediaId = mediaIdFromPath(pathFromHref(link?.getAttribute('href') ?? ''))
   return {
     id: `${sourceId}/${mediaId}`,
     mediaId,
@@ -179,7 +187,7 @@ export function makeAnimesOrionSource(): Source {
         })
       }
       // Movie pages have no episode list: the playable iframe lives on the page itself.
-      const isMovie = mediaId.startsWith('filmes/')
+      const isMovie = mediaId.startsWith('filme:')
       if (episodes.length === 0 && isMovie) {
         return [{ id: mediaId, mediaId, number: 1, lang: 'pt-br' }]
       }
@@ -193,10 +201,15 @@ export function makeAnimesOrionSource(): Source {
     },
 
     async getStreams(ctx, media, episode): Promise<StreamSource[]> {
-      // 1) episode/movie page -> first player iframe (myembed.biz/serie/<id>/<s>/<e> or /filme/<id>)
-      const episodeDoc = parseHtml(await fetchHtml(ctx.fetch, `${BASE}/${episode.id}/`))
+      // 1) episode/movie page -> first player iframe (myembed.biz/serie/<id>/<s>/<e> or /filme/<id>).
+      //    Episode ids for series are site paths ("episodios/<slug>"); for movies they are the
+      //    slash-free mediaId ("filme:<slug>") which must be routed onto the /filmes/ page.
+      const page = episode.id.startsWith('filme:')
+        ? `${BASE}/filmes/${episode.id.slice('filme:'.length)}/`
+        : `${BASE}/${episode.id}/`
+      const episodeDoc = parseHtml(await fetchHtml(ctx.fetch, page))
       const embedUrl = episodeDoc.querySelector<HTMLIFrameElement>('.dooplay_player iframe[src]')?.getAttribute('src')
-      if (!embedUrl) throw new Error(`no player iframe found on ${BASE}/${episode.id}/`)
+      if (!embedUrl) throw new Error(`no player iframe found on ${page}`)
 
       // 2) myembed gateway (serves a decoy page unless the animesorion Referer is sent) -> playerflix url
       const gatewayDoc = parseHtml(await fetchHtmlWithHeaders(ctx.fetch, embedUrl, { Referer: `${BASE}/` }))

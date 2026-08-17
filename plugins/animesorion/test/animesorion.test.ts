@@ -220,12 +220,12 @@ describe('animesorion source', () => {
   it('parses search cards for both animes and filmes paths', async () => {
     const res = await animesorion.search({ ...ctx, fetch: fixtureFetch({ '?s=': SEARCH_HTML }) }, 'naruto', 1)
     expect(res.items.map((m) => m.mediaId)).toEqual([
-      'animes/boruto-naruto-next-generations',
-      'filmes/naruto-shippuden-filme-8-boruto-naruto-o-filme'
+      'boruto-naruto-next-generations',
+      'filme:naruto-shippuden-filme-8-boruto-naruto-o-filme'
     ])
     expect(res.items[0]?.title).toBe('Boruto: Naruto Next Generations')
     expect(res.items[0]?.type).toBe('anime')
-    expect(res.items[0]?.id).toBe('animesorion/animes/boruto-naruto-next-generations')
+    expect(res.items[0]?.id).toBe('animesorion/boruto-naruto-next-generations')
     expect(res.items[0]?.coverUrl).toContain('n4OLeeHqP4tpdvDxiloV65N6M5h.jpg')
     expect(res.hasNextPage).toBe(false)
   })
@@ -233,7 +233,7 @@ describe('animesorion source', () => {
   it('parses media details: title, cover, synopsis (without tag/gallery noise) and genres', async () => {
     const m = await animesorion.getMedia(
       { ...ctx, fetch: fixtureFetch({ 'animes/one-punch-man': MEDIA_HTML }) },
-      'animes/one-punch-man'
+      'one-punch-man'
     )
     expect(m.title).toBe('One-Punch Man')
     expect(m.type).toBe('anime')
@@ -247,10 +247,10 @@ describe('animesorion source', () => {
   it('parses the episode list with season/number from .numerando, not from the URL', async () => {
     const eps = await animesorion.getEpisodes(
       { ...ctx, fetch: fixtureFetch({ 'animes/one-punch-man/': EPISODES_HTML }) },
-      'animes/one-punch-man'
+      'one-punch-man'
     )
     expect(eps).toHaveLength(3)
-    expect(eps[0]).toMatchObject({ season: 1, number: 1, mediaId: 'animes/one-punch-man', lang: 'pt-br' })
+    expect(eps[0]).toMatchObject({ season: 1, number: 1, mediaId: 'one-punch-man', lang: 'pt-br' })
     expect(eps[0]?.id).toBe('episodios/one-punch-man')
     expect(eps[0]?.title).toBe('O Homem Mais Poderoso do Mundo')
     expect(eps[2]).toMatchObject({ season: 3, number: 1 })
@@ -260,9 +260,9 @@ describe('animesorion source', () => {
   it('returns a single pseudo-episode for movie pages (the player lives on the page)', async () => {
     const eps = await animesorion.getEpisodes(
       { ...ctx, fetch: fixtureFetch({ 'filmes/jujutsu-kaisen-0-o-filme': MOVIE_HTML }) },
-      'filmes/jujutsu-kaisen-0-o-filme'
+      'filme:jujutsu-kaisen-0-o-filme'
     )
-    expect(eps).toEqual([{ id: 'filmes/jujutsu-kaisen-0-o-filme', mediaId: 'filmes/jujutsu-kaisen-0-o-filme', number: 1, lang: 'pt-br' }])
+    expect(eps).toEqual([{ id: 'filme:jujutsu-kaisen-0-o-filme', mediaId: 'filme:jujutsu-kaisen-0-o-filme', number: 1, lang: 'pt-br' }])
   })
 
   it('follows the myembed -> playerflix chain, resolving VIP players to signed direct streams', async () => {
@@ -278,13 +278,13 @@ describe('animesorion source', () => {
       log
     )
     const media = {
-      id: 'animesorion/animes/one-punch-man',
-      mediaId: 'animes/one-punch-man',
+      id: 'animesorion/one-punch-man',
+      mediaId: 'one-punch-man',
       sourceId: 'animesorion',
       title: 'One-Punch Man',
       type: 'anime' as const
     }
-    const episode = { id: 'episodios/one-punch-man-2', mediaId: 'animes/one-punch-man', number: 2, season: 1, lang: 'pt-br' }
+    const episode = { id: 'episodios/one-punch-man-2', mediaId: 'one-punch-man', number: 2, season: 1, lang: 'pt-br' }
     const streams = await animesorion.getStreams!({ ...ctx, fetch }, media, episode)
 
     expect(streams).toHaveLength(2)
@@ -312,8 +312,8 @@ describe('animesorion source', () => {
       'myembed.biz/serie/63926/1/2': GATEWAY_HTML,
       'playerflix.ink/inc/Ajax.php': AJAX_NOVIP_JSON
     })
-    const media = { id: 'animesorion/animes/one-punch-man', mediaId: 'animes/one-punch-man', sourceId: 'animesorion', title: 'One-Punch Man', type: 'anime' as const }
-    const episode = { id: 'episodios/one-punch-man-2', mediaId: 'animes/one-punch-man', number: 2 }
+    const media = { id: 'animesorion/one-punch-man', mediaId: 'one-punch-man', sourceId: 'animesorion', title: 'One-Punch Man', type: 'anime' as const }
+    const episode = { id: 'episodios/one-punch-man-2', mediaId: 'one-punch-man', number: 2 }
     await expect(animesorion.getStreams!({ ...ctx, fetch }, media, episode)).rejects.toThrow(/no resolvable stream.*Blogger\/pt-br/s)
   })
 
@@ -326,13 +326,13 @@ describe('animesorion source', () => {
     ])
     const fetch = fixtureFetch({ 'animesorion.cc/': HOME_HTML })
     const destaques = await animesorion.getHomeSection!({ ...ctx, fetch }, 'destaques', 1)
-    expect(destaques.items.map((m) => m.mediaId)).toEqual(['animes/one-punch-man'])
+    expect(destaques.items.map((m) => m.mediaId)).toEqual(['one-punch-man'])
     expect(destaques.items[0]?.title).toBe('One-Punch Man')
     expect(destaques.items[0]?.coverUrl).toContain('a8BknzvFVK5EZ83rKg1a83iwaj0.jpg')
     const ultimos = await animesorion.getHomeSection!({ ...ctx, fetch }, 'ultimos-animes', 1)
-    expect(ultimos.items.map((m) => m.mediaId)).toEqual(['animes/digimon-9-beatbreak'])
+    expect(ultimos.items.map((m) => m.mediaId)).toEqual(['digimon-9-beatbreak'])
     const filmes = await animesorion.getHomeSection!({ ...ctx, fetch }, 'filmes', 1)
-    expect(filmes.items.map((m) => m.mediaId)).toEqual(['filmes/kaijuu-8-gou-kaiju-no-8-filme'])
+    expect(filmes.items.map((m) => m.mediaId)).toEqual(['filme:kaijuu-8-gou-kaiju-no-8-filme'])
   })
 
   it('rejects unknown home sections', async () => {

@@ -13,6 +13,18 @@ const sourceId = 'betteranime'
 const BLOGGER_RPC_URL =
   'https://www.blogger.com/_/BloggerVideoPlayerUi/data/batchexecute?rpcids=WcwnYd&source-path=%2Fvideo.g&f.sid=1&bl=boq_bloggeruiserver_20260811.01_p0&hl=pt-BR&_reqid=100000&rt=c'
 
+/** Blogger origin the googlevideo playback URLs and the batchexecute RPC expect as Referer. */
+const BLOGGER_REFERER = 'https://www.blogger.com/'
+
+/**
+ * googlevideo accepts a generic `node` User-Agent but rejects recognized
+ * browser/media UAs (Chrome, okhttp, reqwest, the host's own "woyomi/…") with
+ * 403. Pinned on both the batchexecute resolution call (Blogger only signs
+ * playable googlevideo URLs for generic clients) and the returned streams (so
+ * the app's proxy forwards it).
+ */
+const BLOGGER_UA = 'node'
+
 /** DOMParser is injected into the worker by the sandbox host (linkedom); tests polyfill it. */
 function parseHtml(html: string): Document {
   return new DOMParser().parseFromString(html, 'text/html')
@@ -126,7 +138,11 @@ async function resolveBloggerStreams(fetch: FetchFn, token: string): Promise<Str
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      Referer: 'https://www.blogger.com/',
+      Referer: BLOGGER_REFERER,
+      // Blogger issues playable googlevideo URLs only to generic clients; with
+      // the host's own UA (e.g. "woyomi/0.1 (+native)") it signs URLs that
+      // googlevideo answers with 403. Pin a `node` UA on the resolution call.
+      'User-Agent': BLOGGER_UA,
       'X-Same-Domain': '1'
     },
     body: req
@@ -141,10 +157,11 @@ async function resolveBloggerStreams(fetch: FetchFn, token: string): Promise<Str
       url,
       kind: 'mp4',
       quality: itagQuality(url)
-      // googlevideo playback URLs work with plain range requests (no Referer required)
+      // googlevideo rejects playback of these Blogger-hosted media unless the
+      // request carries the Blogger origin as Referer (the app's own origin 403s).
     })
   }
-  return streams
+  return streams.map((s) => ({ ...s, headers: { Referer: BLOGGER_REFERER, 'User-Agent': BLOGGER_UA } }))
 }
 
 /** Progressive YouTube itags used by Blogger-hosted videos; quality is derived from the itag param. */

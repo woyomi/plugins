@@ -85,11 +85,12 @@ function fixtureFetch(routes: Record<string, string>): FetchFn {
 }
 
 /** Fetch stub that also captures the batchexecute POST bodies and answers per token. */
-function rpcCaptureFetch(rpcBodies: string[]): FetchFn {
+function rpcCaptureFetch(rpcBodies: string[], rpcHeaders: Array<Record<string, string>>): FetchFn {
   return async (url, init): Promise<FetchResult> => {
     if (url.includes('batchexecute')) {
       const body = init?.body ?? ''
       rpcBodies.push(body)
+      rpcHeaders.push(init?.headers ?? {})
       const token = Object.keys(RPC_BY_TOKEN).find((t) => body.includes(t))
       if (!token) return { status: 200, headers: {}, body: rpcResponse([]) }
       return { status: 200, headers: {}, body: RPC_BY_TOKEN[token]! }
@@ -184,7 +185,8 @@ describe('animesonlinecc source', () => {
     }
     const episode = { id: 'animesonlinecc/naruto-shippuden/1', mediaId: 'naruto-shippuden', number: 1 }
     const rpcBodies: string[] = []
-    const streams = await animesonlinecc.getStreams!({ ...ctx, fetch: rpcCaptureFetch(rpcBodies) }, media, episode)
+    const rpcHeaders: Array<Record<string, string>> = []
+    const streams = await animesonlinecc.getStreams!({ ...ctx, fetch: rpcCaptureFetch(rpcBodies, rpcHeaders) }, media, episode)
     // both player options were resolved through the batchexecute RPC
     expect(rpcBodies).toHaveLength(2)
     // the RPC frame must be wrapped in the extra envelope array ([[[...]]]);
@@ -192,6 +194,7 @@ describe('animesonlinecc source', () => {
     expect(rpcBodies[0]).toContain('f.req=%5B%5B%5B%22WcwnYd%22')
     expect(rpcBodies.some((b) => b.includes('TOKENDOBLADO'))).toBe(true)
     expect(rpcBodies.some((b) => b.includes('TOKENLEGENDADO'))).toBe(true)
+    expect(rpcHeaders.every((headers) => headers['User-Agent'] === 'node')).toBe(true)
     // 4 total streams (2 per server option); 720p (top tier) first, equal-tier ties
     // keep insertion (server) order, so assert on the leading stream + the full set
     const scores = streams.map((s) => Number(/(\d{3,4})p/.exec(s.quality ?? '')?.[1] ?? 0))
@@ -203,6 +206,10 @@ describe('animesonlinecc source', () => {
     expect(streams[0]?.kind).toBe('mp4')
     expect(streams[0]?.url).toContain('itag=22')
     expect(streams[0]?.url).toContain('googlevideo.com/videoplayback')
+    // googlevideo playback needs the Blogger Referer and a UA googlevideo accepts
+    // (the app's Rust proxy otherwise 403s on its reqwest-style UA)
+    expect(streams.every((s) => s.headers?.Referer === 'https://www.blogger.com/')).toBe(true)
+    expect(streams.every((s) => s.headers?.['User-Agent'] === 'node')).toBe(true)
   })
 
   it('throws a diagnostic error when the episode page has no players', async () => {

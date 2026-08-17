@@ -185,16 +185,19 @@ describe('betteranime source', () => {
     const rpc = calls.find((c) => c.url.includes('batchexecute'))
     expect(calls.some((c) => c.url.includes('/jwplayer/'))).toBe(true)
     expect(rpc?.body).toContain(BLOGGER_TOKEN)
+    expect(rpc?.headers?.['User-Agent']).toBe('node')
     // the RPC frame must be wrapped in the extra envelope array ([[[...]]]);
     // two-level nesting is answered with `er`/400 despite HTTP 200
     expect(rpc?.body).toContain('f.req=%5B%5B%5B%22WcwnYd%22')
 
-    // itag 22 (720p) ranks above itag 18 (360p); googlevideo needs no Referer
+    // itag 22 (720p) ranks above itag 18 (360p)
     expect(streams).toHaveLength(2)
     expect(streams[0]).toMatchObject({ kind: 'mp4', quality: '720p' })
     expect(streams[0]?.url).toContain('itag=22')
     expect(streams[0]?.url).toContain('googlevideo.com/videoplayback')
-    expect(streams[0]?.headers).toBeUndefined()
+    // googlevideo playback needs the Blogger Referer and a UA googlevideo accepts
+    // (the app's Rust proxy otherwise 403s on its reqwest-style UA)
+    expect(streams[0]?.headers).toEqual({ Referer: 'https://www.blogger.com/', 'User-Agent': 'node' })
     expect(streams[1]).toMatchObject({ kind: 'mp4', quality: '360p' })
     expect(streams[1]?.url).toContain('itag=18')
   })

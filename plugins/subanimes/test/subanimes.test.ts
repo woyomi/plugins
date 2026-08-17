@@ -218,6 +218,9 @@ describe('subanimes source', () => {
     expect(streams).toHaveLength(2) // the iframe duplicate must not add a third
     expect(streams[0]).toMatchObject({ kind: 'hls', quality: '720p • Dublado' })
     expect(streams[0]?.url).toMatch(/^https:\/\/00000410\.xyz\/m3\//)
+    // manifest is served without ACAO; the app's network loader sends the declared
+    // Referer so it can fetch the CORS-blocked /m3/ playlist natively
+    expect(streams[0]?.headers).toEqual({ Referer: 'https://subanimes.org/' })
     expect(streams[1]).toMatchObject({ kind: 'hls', quality: '480p • Legendado' })
     expect(streams[1]?.url).toMatch(/^https:\/\/00000410\.xyz\/m3\//)
     expect(streams[0]?.url).not.toBe(streams[1]?.url)

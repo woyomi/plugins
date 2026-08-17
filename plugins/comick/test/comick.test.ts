@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeComickSource } from '../src/comick.js'
-import type { FetchFn, FetchResult } from '@woyomi/core'
+import type { FetchFn, FetchResult, Media } from '@woyomi/core'
 
 const comick = makeComickSource()
 
@@ -254,6 +254,9 @@ describe('comick source', () => {
     expect(m.title).toBe('Solo-fessional: Solo Katsu Danshi to Bocchi Joshi no Koubou-sen')
     expect(m.type).toBe('manga')
     expect(m.coverUrl).toContain('cdn1.comicknew.pictures')
+    // covers 403 without the comick origin as Referer; the app's image loader
+    // reads this `headers` field (same convention as chapter page images)
+    expect((m as Media & { headers?: Record<string, string> }).headers).toEqual({ Referer: 'https://comick.art/' })
     expect(res.hasNextPage).toBe(true)
     expect(res.page).toBe(1)
   })

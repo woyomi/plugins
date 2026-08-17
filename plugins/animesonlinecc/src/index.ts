@@ -11,7 +11,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'animesonlinecc',
     name: 'Animes Online CC',
-    version: '0.1.0',
+    version: '0.1.1',
     apiVersion: API_VERSION,
     lang: 'pt-br',
     description: 'Animes Online CC — animes legendados e dublados via Blogger players (HTML scraping)',

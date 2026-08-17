@@ -11,7 +11,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'betteranime',
     name: 'Better Anime',
-    version: '0.1.0',
+    version: '0.1.1',
     apiVersion: API_VERSION,
     lang: 'pt-br',
     description: 'Better Anime — animes legendados e dublados (WordPress/dooplay scraping)',
