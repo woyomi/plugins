@@ -11,7 +11,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'animesorion',
     name: 'Animes Orion',
-    version: '0.1.0',
+    version: '0.2.0',
     apiVersion: API_VERSION,
     lang: 'pt-br',
     description: 'Animes Orion — animes dublados e legendados e filmes (HTML scraping)',

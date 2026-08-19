@@ -37,6 +37,11 @@ interface WorkDetail extends WorkSummary {
   chapterCount?: number
 }
 
+/** The /works/<slug> endpoint wraps the work in `{ data: WorkDetail }`. */
+interface WorkDetailResponse {
+  data: WorkDetail
+}
+
 interface Chapter {
   id?: string
   /** Usually a number, but fractional chapters exist (e.g. 102.5). */
@@ -44,6 +49,8 @@ interface Chapter {
   title?: string
   publishedAt?: string
   isPreview?: boolean
+  /** "chapter" | "spoiler" — spoiler chapters have no readable pages yet. */
+  kind?: string
 }
 
 interface ChapterListResponse {
@@ -83,6 +90,25 @@ function mapStatus(publicationStatus: string | undefined): MediaStatus | undefin
   return publicationStatus ? STATUS_MAP[publicationStatus] : undefined
 }
 
+/**
+ * aurora.snipercache.com cover URLs carry a per-request `sig`/`exp` pair that
+ * changes on every API call even though the underlying image is the same and
+ * is hotlink-safe without the signature. Strip them so the URL (and thus the
+ * app's sha256 cover hash) is stable across calls — otherwise every getMedia
+ * invalidates the cached cover and re-downloads.
+ */
+function stableCoverUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  try {
+    const u = new URL(url)
+    u.searchParams.delete('sig')
+    u.searchParams.delete('exp')
+    return u.toString()
+  } catch {
+    return url
+  }
+}
+
 /** "Capitulo 1189" is a generated placeholder, not a real chapter title. */
 function isPlaceholderTitle(title: string | undefined, numberText: string): boolean {
   if (!title) return true
@@ -99,7 +125,7 @@ function mapCard(w: WorkSummary): Media {
     title: w.title?.trim() || 'Untitled',
     // manga/manhwa/manhua are all page-based reading; woyomi models them as 'manga'
     type: 'manga',
-    coverUrl: w.coverUrl ?? undefined
+    coverUrl: stableCoverUrl(w.coverUrl) ?? undefined
   }
 }
 
@@ -131,7 +157,8 @@ export function makeMugiwarasSource(): Source {
     },
 
     async getMedia(ctx, mediaId): Promise<Media> {
-      const w = await fetchJson<WorkDetail>(ctx.fetch, `${API}/works/${mediaId}`)
+      const res = await fetchJson<WorkDetailResponse>(ctx.fetch, `${API}/works/${mediaId}`)
+      const w = res.data
       const altTitles = (w.altTitles ?? []).map((t) => t.trim()).filter(Boolean)
       return {
         id: `${sourceId}/${mediaId}`,
@@ -139,7 +166,7 @@ export function makeMugiwarasSource(): Source {
         sourceId,
         title: w.title?.trim() || 'Untitled',
         type: 'manga',
-        coverUrl: w.coverUrl ?? undefined,
+        coverUrl: stableCoverUrl(w.coverUrl) ?? undefined,
         synopsis: w.description?.trim() || undefined,
         status: mapStatus(w.publicationStatus),
         tags: w.tags && w.tags.length > 0 ? w.tags : undefined,
@@ -164,6 +191,8 @@ export function makeMugiwarasSource(): Source {
       const episodes: Episode[] = []
       for (const ch of chapters) {
         if (ch.isPreview) continue
+        // "spoiler" chapters are pre-release entries with no readable pages yet
+        if (ch.kind === 'spoiler') continue
         const numberText = String(ch.number ?? '')
         const number = Number(numberText)
         if (numberText === '' || !Number.isFinite(number)) continue

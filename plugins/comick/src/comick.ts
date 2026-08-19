@@ -182,26 +182,25 @@ function altTitles(data: ComicData): string[] | undefined {
 }
 
 function mapBrowse(comic: BrowseComic): Media {
-  return withCoverHeaders({
+  return {
     id: `${sourceId}/${comic.slug}`,
     mediaId: comic.slug,
     sourceId,
     title: comic.title || comic.slug,
     type: 'manga',
     coverUrl: comic.default_thumbnail || undefined
-  })
+  }
 }
 
 /**
  * Comick cover files live on `cdn1.comicknew.pictures` and 403 without
- * `Referer: https://comick.art/` (Cloudflare hotlink protection). Media.coverUrl
- * is otherwise just a URL with no way to carry request headers, so attach the
- * same undocumented `headers` the core/app image loader already reads on chapter
- * content — the host sends it when it loads the cover.
+ * `Referer: https://comick.art/` (Cloudflare hotlink protection). The woyomi
+ * app loads covers via plain `<img src>` (CoverArt) and the native
+ * `cache_cover_image` command — neither of which sends custom headers. Until
+ * the app adds header-bearing cover support (e.g. routing through the stream
+ * proxy, or extending Media with a `headers` field the image loader reads),
+ * comick covers will not render. No plugin-level workaround can fix this.
  */
-function withCoverHeaders(media: Media): Media & { headers: Record<string, string> } {
-  return { ...media, headers: { Referer: `${BASE}/` } }
-}
 
 /**
  * Cursor pagination state for `/api/search` (Laravel cursor paginator): page N
@@ -259,7 +258,7 @@ export function makeComickSource(): Source {
         const name = genre.md_genres?.name?.trim()
         if (name) tags.push(name)
       }
-      return withCoverHeaders({
+      return {
         id: `${sourceId}/${data.slug || mediaId}`,
         mediaId,
         sourceId,
@@ -270,7 +269,7 @@ export function makeComickSource(): Source {
         status: mapStatus(data.status),
         altTitles: altTitles(data),
         tags: tags.length > 0 ? tags : undefined
-      })
+      }
     },
 
     async getEpisodes(ctx, mediaId): Promise<Episode[]> {
@@ -320,15 +319,11 @@ export function makeComickSource(): Source {
       const images = (sv.chapter?.images ?? [])
         .map((image) => image.url)
         .filter((url): url is string => url !== undefined)
-      // CDN images 403 without the site Referer; declared for the host's
-      // image loader (pages `headers`, woyomi core >= 0.2.0 — structurally
-      // assignable even against older core types).
-      const content: ChapterContent & { headers?: Record<string, string> } = {
-        type: 'pages',
-        images,
-        headers: { Referer: `${BASE}/` }
-      }
-      return content
+      // CDN images 403 without `Referer: https://comick.art/`. The reader
+      // (ReaderImage) renders plain `<img src>` and does not send headers,
+      // so chapter pages will also fail to load until the app adds header-
+      // bearing image support. Kept as a plain ChapterContent for now.
+      return { type: 'pages', images }
     },
 
     async getHomeSections(_ctx): Promise<HomeSection[]> {

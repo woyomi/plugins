@@ -44,25 +44,39 @@ const SEARCH_JSON = JSON.stringify({
 })
 
 const WORK_JSON = JSON.stringify({
-  id: 'wrk_1776195280741',
-  slug: 'one-piece',
-  title: 'One Piece',
-  altTitles: ['ONE PIECE'],
-  author: 'Eiichirou Oda',
-  publisher: 'Eiichirou Oda',
-  coverUrl: 'https://aurora.snipercache.com/manga/one-piece/cover/1785954191353-one-piece.webp?sig=iS3jnwg_Q8nuzucFZZo3iA&exp=1787499613',
-  description: 'Quando criança, Monkey D. Luffy foi inspirado a se tornar um pirata ao ouvir as histórias do bucaneiro "Ruivo" Shanks...',
-  tags: ['Ação', 'Aventura', 'Comédia', 'Fantasia'],
-  type: 'manga',
-  status: 'published',
-  publicationStatus: 'ongoing',
-  chapterCount: 1190,
-  isAdult: false
+  data: {
+    id: 'wrk_1776195280741',
+    slug: 'one-piece',
+    title: 'One Piece',
+    altTitles: ['ONE PIECE'],
+    author: 'Eiichirou Oda',
+    publisher: 'Eiichirou Oda',
+    coverUrl: 'https://aurora.snipercache.com/manga/one-piece/cover/1785954191353-one-piece.webp?sig=iS3jnwg_Q8nuzucFZZo3iA&exp=1787499613',
+    description: 'Quando criança, Monkey D. Luffy foi inspirado a se tornar um pirata ao ouvir as histórias do bucaneiro "Ruivo" Shanks...',
+    tags: ['Ação', 'Aventura', 'Comédia', 'Fantasia'],
+    type: 'manga',
+    status: 'published',
+    publicationStatus: 'ongoing',
+    chapterCount: 1190,
+    isAdult: false
+  }
 })
 
 // The API lists chapters newest-first, paged; meta.totalPages drives pagination.
 const CHAPTERS_PAGE1_JSON = JSON.stringify({
   data: [
+    {
+      id: 'chp_1786995678300',
+      number: 1191,
+      title: 'Ainda tem o Loki',
+      publishedAt: '2026-08-17T19:41:18.300Z',
+      access: 'free',
+      isFree: true,
+      isPremium: false,
+      isLocked: false,
+      kind: 'spoiler',
+      isPreview: false
+    },
     {
       id: 'chp_1786040622728',
       number: 1190,
@@ -88,7 +102,7 @@ const CHAPTERS_PAGE1_JSON = JSON.stringify({
       isPreview: false
     }
   ],
-  meta: { page: 1, limit: 100, total: 4, totalPages: 2 }
+  meta: { page: 1, limit: 100, total: 5, totalPages: 2 }
 })
 
 const CHAPTERS_PAGE2_JSON = JSON.stringify({
@@ -213,6 +227,8 @@ describe('mugiwaras source', () => {
     expect(res.items[0]?.type).toBe('manga')
     expect(res.items[0]?.id).toBe('mugiwaras/one-piece')
     expect(res.items[0]?.coverUrl).toContain('one-piece.webp')
+    // cover URLs are stripped of sig/exp for stable caching
+    expect(res.items[0]?.coverUrl).not.toContain('sig=')
     expect(res.hasNextPage).toBe(false)
   })
 
@@ -227,6 +243,26 @@ describe('mugiwaras source', () => {
     expect(m.coverUrl).toContain('one-piece.webp')
   })
 
+  it('strips sig/exp from cover URLs so the cover hash is stable across calls', async () => {
+    const m = await mugiwaras.getMedia({ ...ctx, fetch: fixtureFetch({ '/works/one-piece': WORK_JSON }) }, 'one-piece')
+    expect(m.coverUrl).not.toContain('sig=')
+    expect(m.coverUrl).not.toContain('exp=')
+  })
+
+  it('filters out spoiler chapters that have no readable pages', async () => {
+    const eps = await mugiwaras.getEpisodes(
+      {
+        ...ctx,
+        fetch: fixtureFetch({
+          'chapters?limit=100&page=1': CHAPTERS_PAGE1_JSON,
+          'chapters?limit=100&page=2': CHAPTERS_PAGE2_JSON
+        })
+      },
+      'one-piece'
+    )
+    expect(eps.find((e) => e.number === 1191)).toBeUndefined()
+  })
+
   it('walks all chapter-list pages and sorts episodes ascending', async () => {
     const eps = await mugiwaras.getEpisodes(
       {
@@ -238,6 +274,7 @@ describe('mugiwaras source', () => {
       },
       'one-piece'
     )
+    // page 1 has a spoiler chapter (1191) that is filtered out
     expect(eps).toHaveLength(4)
     expect(eps.map((e) => e.number)).toEqual([1, 102.5, 1189, 1190])
     expect(eps[0]?.id).toBe('mugiwaras/one-piece/1')

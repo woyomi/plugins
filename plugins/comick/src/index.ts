@@ -33,7 +33,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'comick',
     name: 'Comick',
-    version: '0.1.0',
+    version: '0.2.0',
     apiVersion: API_VERSION,
     lang: 'multi',
     description: 'Comick — multilingual manga aggregator',

@@ -297,13 +297,16 @@ describe('animesorion source', () => {
     expect(streams[1]).toMatchObject({ kind: 'mp4', quality: 'VIP Player (en-us)' })
     expect(streams[1]?.url).toContain('.mp4')
 
-    // the gateway request must carry the animesorion Referer (it serves a decoy page otherwise)
+    // the gateway request must carry the animesorion referer (it serves a decoy page otherwise)
+    // and browser-like headers (playerflix sits behind Cloudflare)
     const gatewayCall = log.find((e) => e.url.includes('myembed.biz'))
-    expect(gatewayCall?.headers).toMatchObject({ Referer: 'https://animesorion.cc/' })
+    expect(gatewayCall?.headers).toMatchObject({ referer: 'https://animesorion.cc/' })
+    expect(gatewayCall?.headers?.['user-agent']).toMatch(/Mozilla/)
     // the playerflix ajax must carry X-Requested-With and the episode id/season/episode params
     const ajaxCall = log.find((e) => e.url.includes('inc/Ajax.php'))
     expect(ajaxCall?.url).toBe('https://playerflix.ink/inc/Ajax.php?type=tv&id=63926&season=1&episode=2')
-    expect(ajaxCall?.headers).toMatchObject({ 'X-Requested-With': 'XMLHttpRequest' })
+    expect(ajaxCall?.headers).toMatchObject({ 'x-requested-with': 'XMLHttpRequest' })
+    expect(ajaxCall?.headers?.['user-agent']).toMatch(/Mozilla/)
   })
 
   it('throws a descriptive error when no server is resolvable (Blogger/Premium only)', async () => {

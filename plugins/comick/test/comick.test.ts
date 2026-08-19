@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeComickSource } from '../src/comick.js'
-import type { FetchFn, FetchResult, Media } from '@woyomi/core'
+import type { FetchFn, FetchResult } from '@woyomi/core'
 
 const comick = makeComickSource()
 
@@ -254,9 +254,9 @@ describe('comick source', () => {
     expect(m.title).toBe('Solo-fessional: Solo Katsu Danshi to Bocchi Joshi no Koubou-sen')
     expect(m.type).toBe('manga')
     expect(m.coverUrl).toContain('cdn1.comicknew.pictures')
-    // covers 403 without the comick origin as Referer; the app's image loader
-    // reads this `headers` field (same convention as chapter page images)
-    expect((m as Media & { headers?: Record<string, string> }).headers).toEqual({ Referer: 'https://comick.art/' })
+    // NOTE: comick covers 403 without `Referer: https://comick.art/` but the
+    // app's CoverArt uses plain <img src> with no header support, so covers
+    // won't render until the app adds header-bearing image loading.
     expect(res.hasNextPage).toBe(true)
     expect(res.page).toBe(1)
   })
@@ -344,9 +344,10 @@ describe('comick source', () => {
         'https://cdn1.comicknew.pictures/00-solo-leveling/0_200.0/en/9877320d/0.webp',
         'https://cdn1.comicknew.pictures/00-solo-leveling/0_200.0/en/9877320d/1.webp',
         'https://cdn1.comicknew.pictures/00-solo-leveling/0_200.0/en/9877320d/2.webp'
-      ],
-      // CDN images 403 without the site Referer (pages headers, core >= 0.2.0)
-      headers: { Referer: 'https://comick.art/' }
+      ]
+      // NOTE: CDN images 403 without `Referer: https://comick.art/` but the
+      // reader uses plain <img src>, so pages won't render until the app
+      // adds header-bearing image support.
     })
   })
 

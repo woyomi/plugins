@@ -4,6 +4,28 @@ import { fetchHtml, fetchJson } from '@woyomi/core'
 const BASE = 'https://animesorion.cc'
 const sourceId = 'animesorion'
 
+/**
+ * playerflix.ink sits behind Cloudflare and returns empty responses (HTTP 200,
+ * 0 bytes) to requests that don't carry a full set of browser-like headers.
+ * The native fetch_url hardcodes `user-agent: woyomi/0.1 (+native)` before
+ * applying plugin headers, so we override it here with a Chrome UA plus the
+ * Sec-Fetch / Accept-Language headers Cloudflare checks.
+ */
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+
+function browserHeaders(referer: string): Record<string, string> {
+  return {
+    'user-agent': BROWSER_UA,
+    accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'accept-language': 'en-US,en;q=0.5',
+    'sec-fetch-dest': 'iframe',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'cross-site',
+    referer
+  }
+}
+
 /** DOMParser is injected into the worker by the sandbox host (linkedom); tests polyfill it. */
 function parseHtml(html: string): Document {
   return new DOMParser().parseFromString(html, 'text/html')
@@ -125,14 +147,18 @@ function parseNumerando(label: string | undefined): { season?: number; number?: 
   return {}
 }
 
-/** fetchHtml, but with request headers (the embed host 404s without the site Referer). */
-async function fetchHtmlWithHeaders(
+/**
+ * Fetch the myembed.biz gateway or playerflix.ink page with full browser-like
+ * headers — Cloudflare on playerflix returns empty bodies for non-browser UAs.
+ */
+async function fetchBrowserHtml(
   fetch: Parameters<typeof fetchHtml>[0],
   url: string,
-  headers: Record<string, string>
+  referer: string
 ): Promise<string> {
-  const res = await fetch(url, { headers: { accept: 'text/html,*/*', ...headers } })
+  const res = await fetch(url, { headers: browserHeaders(referer) })
   if (res.status < 200 || res.status >= 300) throw new Error(`GET ${url} -> HTTP ${res.status}`)
+  if (!res.body || res.body.length === 0) throw new Error(`GET ${url} -> empty response (Cloudflare challenge?)`)
   return res.body
 }
 
@@ -212,14 +238,25 @@ export function makeAnimesOrionSource(): Source {
       if (!embedUrl) throw new Error(`no player iframe found on ${page}`)
 
       // 2) myembed gateway (serves a decoy page unless the animesorion Referer is sent) -> playerflix url
-      const gatewayDoc = parseHtml(await fetchHtmlWithHeaders(ctx.fetch, embedUrl, { Referer: `${BASE}/` }))
+      //    Cloudflare on playerflix returns empty bodies for non-browser UAs, so use browser headers.
+      const gatewayDoc = parseHtml(await fetchBrowserHtml(ctx.fetch, embedUrl, `${BASE}/`))
       const playerFlixUrl = gatewayDoc.querySelector<HTMLIFrameElement>('iframe#video-player')?.getAttribute('src')
       if (!playerFlixUrl) throw new Error(`no playerflix iframe inside ${embedUrl}`)
 
       // 3) playerflix JSON api -> embed options (Blogger / VIP Player / WatchPlayer / Premium)
       const ajaxUrl = `${new URL(playerFlixUrl).origin}/inc/Ajax.php${playerFlixAjaxQuery(playerFlixUrl)}`
       const manifest = await fetchJson<PlayerFlixResponse>(ctx.fetch, ajaxUrl, {
-        headers: { 'X-Requested-With': 'XMLHttpRequest', Referer: playerFlixUrl }
+        headers: {
+          'user-agent': BROWSER_UA,
+          accept: '*/*',
+          'accept-language': 'en-US,en;q=0.5',
+          'x-requested-with': 'XMLHttpRequest',
+          referer: playerFlixUrl,
+          origin: new URL(playerFlixUrl).origin,
+          'sec-fetch-dest': 'empty',
+          'sec-fetch-mode': 'cors',
+          'sec-fetch-site': 'same-origin'
+        }
       })
       const options = manifest.data?.options ?? []
 
@@ -300,9 +337,14 @@ async function resolveEmbedPlayer(
   const res = await fetchJson<EmbedPlayerVideo>(fetch, api, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'X-Requested-With': 'XMLHttpRequest',
-      Referer: option.embed ?? ''
+      'user-agent': BROWSER_UA,
+      'content-type': 'application/x-www-form-urlencoded',
+      'x-requested-with': 'XMLHttpRequest',
+      referer: option.embed ?? '',
+      origin: new URL(option.embed).origin,
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-origin'
     },
     body: `hash=${hash}&r=${encodeURIComponent(playerFlixUrl)}`
   })

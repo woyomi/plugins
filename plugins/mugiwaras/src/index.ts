@@ -11,7 +11,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'mugiwaras',
     name: 'Mugiwaras',
-    version: '0.1.0',
+    version: '0.2.0',
     apiVersion: API_VERSION,
     lang: 'pt-br',
     description: 'Mugiwaras Oficial — mangás, manhwas e manhuas em português (JSON API)',
