@@ -11,8 +11,8 @@ importers:
   plugins/animefire:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -30,8 +30,8 @@ importers:
   plugins/animesonlinecc:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -49,8 +49,8 @@ importers:
   plugins/animesorion:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -68,8 +68,8 @@ importers:
   plugins/betteranime:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -87,8 +87,8 @@ importers:
   plugins/comick:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -106,8 +106,8 @@ importers:
   plugins/mangadex:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -122,8 +122,8 @@ importers:
   plugins/mugiwaras:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -141,8 +141,8 @@ importers:
   plugins/subanimes:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -160,8 +160,8 @@ importers:
   plugins/tsundoku:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.3.0
+        version: 0.3.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -522,6 +522,10 @@ packages:
 
   '@woyomi/core@0.1.0':
     resolution: {integrity: sha512-WR39Pi2+GohKu6/qZ9sXmwSqWHVn01v19VR4sscy/JXvqesZXYKuiu+0GrFzxbh7yZu+CQkH+N2IGdDAhqeV+g==}
+    engines: {node: '>=20'}
+
+  '@woyomi/core@0.3.0':
+    resolution: {integrity: sha512-x8sqQ6nMLY4IImjiC3w3v4zATZz02VqLHcmsy2xu+n0JbBL3qfmChmydDN8tYyc4TesaKqRqDq3W4u48QfW19A==}
     engines: {node: '>=20'}
 
   '@woyomi/plugin-builder@0.1.0':
@@ -1041,6 +1045,10 @@ snapshots:
       tinyrainbow: 2.0.0
 
   '@woyomi/core@0.1.0':
+    dependencies:
+      zod: 3.25.76
+
+  '@woyomi/core@0.3.0':
     dependencies:
       zod: 3.25.76
 

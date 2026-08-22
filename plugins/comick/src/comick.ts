@@ -188,7 +188,8 @@ function mapBrowse(comic: BrowseComic): Media {
     sourceId,
     title: comic.title || comic.slug,
     type: 'manga',
-    coverUrl: comic.default_thumbnail || undefined
+    coverUrl: comic.default_thumbnail || undefined,
+    coverHeaders: { Referer: `${BASE}/` }
   }
 }
 
@@ -265,6 +266,7 @@ export function makeComickSource(): Source {
         type: 'manga',
         title: data.title || mediaId,
         coverUrl: data.default_thumbnail || undefined,
+        coverHeaders: { Referer: `${BASE}/` },
         synopsis: cleanSynopsis(data.desc),
         status: mapStatus(data.status),
         altTitles: altTitles(data),
@@ -319,11 +321,11 @@ export function makeComickSource(): Source {
       const images = (sv.chapter?.images ?? [])
         .map((image) => image.url)
         .filter((url): url is string => url !== undefined)
-      // CDN images 403 without `Referer: https://comick.art/`. The reader
-      // (ReaderImage) renders plain `<img src>` and does not send headers,
-      // so chapter pages will also fail to load until the app adds header-
-      // bearing image support. Kept as a plain ChapterContent for now.
-      return { type: 'pages', images }
+      return {
+        type: 'pages',
+        images,
+        headers: { Referer: `${BASE}/` }
+      }
     },
 
     async getHomeSections(_ctx): Promise<HomeSection[]> {

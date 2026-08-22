@@ -254,9 +254,7 @@ describe('comick source', () => {
     expect(m.title).toBe('Solo-fessional: Solo Katsu Danshi to Bocchi Joshi no Koubou-sen')
     expect(m.type).toBe('manga')
     expect(m.coverUrl).toContain('cdn1.comicknew.pictures')
-    // NOTE: comick covers 403 without `Referer: https://comick.art/` but the
-    // app's CoverArt uses plain <img src> with no header support, so covers
-    // won't render until the app adds header-bearing image loading.
+    expect(m.coverHeaders).toEqual({ Referer: 'https://comick.art/' })
     expect(res.hasNextPage).toBe(true)
     expect(res.page).toBe(1)
   })
@@ -291,6 +289,7 @@ describe('comick source', () => {
     expect(m.id).toBe('comick/00-solo-leveling')
     expect(m.title).toBe('Solo Leveling')
     expect(m.coverUrl).toBe('https://cdn1.comicknew.pictures/00-solo-leveling/covers/48810d64.webp')
+    expect(m.coverHeaders).toEqual({ Referer: 'https://comick.art/' })
     expect(m.status).toBe('completed') // numeric status 2
     expect(m.tags).toEqual(['Manhwa', 'Others', 'Action', 'Adventure', 'Fantasy']) // country KR -> Manhwa
     expect(m.synopsis).not.toContain('<')
@@ -344,10 +343,8 @@ describe('comick source', () => {
         'https://cdn1.comicknew.pictures/00-solo-leveling/0_200.0/en/9877320d/0.webp',
         'https://cdn1.comicknew.pictures/00-solo-leveling/0_200.0/en/9877320d/1.webp',
         'https://cdn1.comicknew.pictures/00-solo-leveling/0_200.0/en/9877320d/2.webp'
-      ]
-      // NOTE: CDN images 403 without `Referer: https://comick.art/` but the
-      // reader uses plain <img src>, so pages won't render until the app
-      // adds header-bearing image support.
+      ],
+      headers: { Referer: 'https://comick.art/' }
     })
   })
 

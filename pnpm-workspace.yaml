@@ -4,5 +4,8 @@ packages:
 allowBuilds:
   esbuild: true
 
+minimumReleaseAgeExclude:
+  - '@woyomi/core@0.3.0'
+
 onlyBuiltDependencies:
   - esbuild
