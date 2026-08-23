@@ -5,6 +5,9 @@ const BASE = 'https://subanimes.org'
 /** Host backing the embedded player: /player/index.php?data=<hex> -> /hls/<hex>/master.txt. */
 const HLS_HOST = 'https://00000410.xyz'
 const sourceId = 'subanimes'
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+const HLS_HEADERS = { Referer: `${BASE}/`, 'User-Agent': BROWSER_UA }
 
 /** DOMParser is injected into the worker by the sandbox host (linkedom); tests polyfill it. */
 function parseHtml(html: string): Document {
@@ -60,6 +63,11 @@ interface PlayerVariant {
   label: string
 }
 
+interface EpisodePlayer {
+  url?: string
+  type?: number
+}
+
 interface EpisodeItem {
   number?: number
   season?: number
@@ -67,6 +75,7 @@ interface EpisodeItem {
   title?: string
   is_filler?: boolean
   url?: string
+  players?: EpisodePlayer[]
 }
 
 interface EpisodesApiResponse {
@@ -108,13 +117,54 @@ function mapSliderCard(a: Element): Media {
   }
 }
 
-function extractPlayerVariants(doc: Document): PlayerVariant[] {
+function playerData(playerUrl: string | undefined): string | undefined {
+  const data = playerUrl ? /[?&]data=([0-9a-fA-F]+)/.exec(playerUrl)?.[1] : undefined
+  return data || undefined
+}
+
+function playerLabel(type: number | undefined): string {
+  if (type === 1) return 'DUBLADO'
+  if (type === 2) return 'LEGENDADO'
+  return ''
+}
+
+/** Current pages expose the direct legacy players in this serialized script. */
+function scriptPlayerVariants(html: string, episode: Episode): PlayerVariant[] {
+  const serialized = /(?:var|let|const)\s+allEpisodesData\s*=\s*(\[[\s\S]*?])\s*;/.exec(html)?.[1]
+  if (!serialized) return []
+
+  let episodes: EpisodeItem[]
+  try {
+    // The site serializes booleans as JavaScript's !0 / !1 rather than JSON.
+    episodes = JSON.parse(serialized.replace(/!([01])(?=\s*[,}\]])/g, (_match, value: string) => (value === '0' ? 'true' : 'false')))
+  } catch {
+    return []
+  }
+
+  const season = episode.season ?? 1
+  const current = episodes.find((item) => item.number === episode.number && (item.season ?? 1) === season)
+  const variants: PlayerVariant[] = []
+  const seen = new Set<string>()
+  for (const player of current?.players ?? []) {
+    const data = playerData(player.url)
+    if (!data || seen.has(data)) continue
+    seen.add(data)
+    variants.push({ data, label: playerLabel(player.type) })
+  }
+  return variants
+}
+
+function extractPlayerVariants(html: string, episode: Episode): PlayerVariant[] {
+  const fromScript = scriptPlayerVariants(html, episode)
+  if (fromScript.length > 0) return fromScript
+
+  const doc = parseHtml(html)
   const variants: PlayerVariant[] = []
   const seen = new Set<string>()
   for (const btn of Array.from(doc.querySelectorAll<HTMLElement>('button.player-tab-btn'))) {
     // onclick="switchPlayer(this, 'https://00000410.xyz/player/index.php?data=<32hex>')"
     const playerUrl = /switchPlayer\(\s*this\s*,\s*'([^']+)'\s*\)/.exec(btn.getAttribute('onclick') ?? '')?.[1]
-    const data = playerUrl ? /[?&]data=([0-9a-fA-F]+)/.exec(playerUrl)?.[1] : undefined
+    const data = playerData(playerUrl)
     if (!data || seen.has(data)) continue
     seen.add(data)
     variants.push({ data, label: text(btn) ?? '' })
@@ -232,14 +282,16 @@ export function makeSubanimesSource(): Source {
       // episode pages live at /ep/<anime-slug>-<season>-episodio-<number>
       const season = episode.season ?? 1
       const pageUrl = `${BASE}/ep/${media.mediaId}-${season}-episodio-${episode.number}`
-      const doc = parseHtml(await fetchHtml(ctx.fetch, pageUrl))
+      const html = await fetchHtml(ctx.fetch, pageUrl)
       const streams: StreamSource[] = []
-      for (const variant of extractPlayerVariants(doc)) {
+      const variants = extractPlayerVariants(html, episode)
+      if (variants.length === 0) throw new Error(`no player data found on ${pageUrl}`)
+      for (const variant of variants) {
         // resolving the media playlist requires fetching the master first:
         // master.txt points at the real /m3/<token> URL
         let master: string
         try {
-          const res = await ctx.fetch(`${HLS_HOST}/hls/${variant.data}/master.txt`)
+          const res = await ctx.fetch(`${HLS_HOST}/hls/${variant.data}/master.txt`, { headers: HLS_HEADERS })
           if (res.status < 200 || res.status >= 300) continue
           master = res.body
         } catch {
@@ -260,6 +312,7 @@ export function makeSubanimesSource(): Source {
           headers: { Referer: `${BASE}/` }
         })
       }
+      if (streams.length === 0) throw new Error(`no HLS playlist resolved for ${pageUrl}`)
       return streams
     },
 

@@ -74,6 +74,25 @@ const EPISODE_PAGE_HTML = `
 </div>
 <iframe src="https://00000410.xyz/player/index.php?data=0055c3d5d8b6eff2a2334944dff14405"></iframe>`
 
+// Current pages gate the visible buttons behind /embed/player. The original
+// player URLs remain in allEpisodesData, alongside other seasons' episodes.
+const CURRENT_EPISODE_PAGE_HTML = `
+<div class="player-tabs">
+  <button class="player-tab-btn active" onclick="switchPlayer(this, 'https://subanimes.org/embed/player?d=interstitial-dub')"> DUBLADO </button>
+  <button class="player-tab-btn" onclick="switchPlayer(this, 'https://subanimes.org/embed/player?d=interstitial-sub')"> LEGENDADO </button>
+</div>
+<iframe src="https://subanimes.org/embed/player?d=interstitial-dub"></iframe>
+<script>
+var allEpisodesData = [
+  {"number":1,"season":2,"is_filler":!1,"players":[{"url":"https://00000410.xyz/player/index.php?data=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","type":1}]},
+  {"number":1,"season":1,"is_filler":!1,"players":[
+    {"url":"https://00000410.xyz/player/index.php?data=0055c3d5d8b6eff2a2334944dff14405","type":1},
+    {"url":"https://00000410.xyz/player/index.php?data=26e5f52fb8c6201ef7f2850042b6b72e","type":2}
+  ]}
+];
+var currentSlug = "naruto";
+</script>`
+
 const MASTER_DUB = `#EXTM3U
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1755223,RESOLUTION=1280x720,FRAME-RATE=23.974,CODES="avc1.64001f,mp4a.40.2"
 https://00000410.xyz/m3/b0JRaCtrOTM2cWZYSkY4MlRvbHU3MXR3OWYvZnpEdGdMN0dNT2tYM3JNeXg1UUtyOC9rSVFDWDFYWXhvVTV1S29ZdktPem9CQktxdGlhYm1wbGNIR29STjA3NVQ
@@ -119,13 +138,15 @@ function fixtureFetch(routes: Record<string, string>): FetchFn {
 }
 
 /** Wrap a FetchFn, recording every URL seen (for asserting constructed request URLs). */
-function recordingFetch(inner: FetchFn): { fetch: FetchFn; urls: string[] } {
+function recordingFetch(inner: FetchFn): { fetch: FetchFn; urls: string[]; inits: Array<Parameters<FetchFn>[1]> } {
   const urls: string[] = []
+  const inits: Array<Parameters<FetchFn>[1]> = []
   const fetch: FetchFn = async (url, init) => {
     urls.push(url)
+    inits.push(init)
     return inner(url, init)
   }
-  return { fetch, urls }
+  return { fetch, urls, inits }
 }
 
 const ctx = {
@@ -196,7 +217,7 @@ describe('subanimes source', () => {
     expect(eps[2]?.id).toBe('subanimes/jujutsu-kaisen/2x23')
   })
 
-  it('resolves one hls stream per audio variant with /m3/ urls and quality labels', async () => {
+  it('resolves current allEpisodesData player entries into HLS streams', async () => {
     const media = {
       id: 'subanimes/naruto',
       mediaId: 'naruto',
@@ -207,7 +228,7 @@ describe('subanimes source', () => {
     const episode = { id: 'subanimes/naruto/1x1', mediaId: 'naruto', number: 1, season: 1, lang: 'pt-br' }
     const rec = recordingFetch(
       fixtureFetch({
-        '/ep/naruto-1-episodio-1': EPISODE_PAGE_HTML,
+        '/ep/naruto-1-episodio-1': CURRENT_EPISODE_PAGE_HTML,
         '/hls/0055c3d5d8b6eff2a2334944dff14405/master.txt': MASTER_DUB,
         '/hls/26e5f52fb8c6201ef7f2850042b6b72e/master.txt': MASTER_LEG
       })
@@ -215,7 +236,8 @@ describe('subanimes source', () => {
     const streams = await subanimes.getStreams!({ ...ctx, fetch: rec.fetch }, media, episode)
     // the episode page URL is derived from the anime slug + season + number
     expect(rec.urls[0]).toBe('https://subanimes.org/ep/naruto-1-episodio-1')
-    expect(streams).toHaveLength(2) // the iframe duplicate must not add a third
+    expect(streams).toHaveLength(2) // season 2's same-numbered episode is ignored
+    expect(rec.inits[1]?.headers).toMatchObject({ Referer: 'https://subanimes.org/' })
     expect(streams[0]).toMatchObject({ kind: 'hls', quality: '720p • Dublado' })
     expect(streams[0]?.url).toMatch(/^https:\/\/00000410\.xyz\/m3\//)
     // manifest is served without ACAO; the app's network loader sends the declared
