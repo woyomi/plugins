@@ -11,10 +11,18 @@ import { fetchJson } from '@woyomi/core'
  * (POST /v1/www/gate-token -> redenovax.com -> /gate/callback sets a
  * per-chapter `mnx_gate_<n>` cookie), but the API serves the page image list
  * with no gate at all. Images live on aurora.snipercache.com behind signed
- * URLs (`?sig=&exp=`) and need no Referer.
+ * URLs (`?sig=&exp=`). The CDN rejects Android image loads unless they carry
+ * both the Mugiwaras Referer and a User-Agent, so the reader uses its native
+ * stream proxy for page requests.
  */
 const API = 'https://app.mugiwarasoficial.com/v1/www'
+const SITE = 'https://mugiwarasoficial.com'
 const sourceId = 'mugiwaras'
+
+const PAGE_HEADERS = {
+  Referer: `${SITE}/`,
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
+}
 
 /** Highest chapter-list page count we will walk before giving up (defensive). */
 const MAX_CHAPTER_PAGES = 50
@@ -216,7 +224,7 @@ export function makeMugiwarasSource(): Source {
       const pages = (res.data?.pages ?? []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
       const images = pages.map((p) => p.imageUrl).filter((u): u is string => typeof u === 'string' && u.length > 0)
       if (images.length === 0) throw new Error(`no pages found for ${slug} chapter ${number}`)
-      return { type: 'pages', images }
+      return { type: 'pages', images, headers: PAGE_HEADERS }
     },
 
     async getHomeSections(): Promise<HomeSection[]> {

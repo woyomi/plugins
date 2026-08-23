@@ -313,6 +313,19 @@ describe('mugiwaras source', () => {
     expect(content.images[1]).toContain('page-0002')
   })
 
+  it('supplies the headers required by the page image CDN', async () => {
+    const content = await mugiwaras.getChapterContent(
+      { ...ctx, fetch: fixtureFetch({ '/chapters/1189/pages': PAGES_JSON }) },
+      'one-piece',
+      'mugiwaras/one-piece/1189'
+    )
+    if (content.type !== 'pages') throw new Error('unreachable')
+    expect(content.headers).toEqual({
+      Referer: 'https://mugiwarasoficial.com/',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
+    })
+  })
+
   it('resolves fractional chapter numbers from the episode id', async () => {
     let called = ''
     const fetch: FetchFn = async (url) => {
