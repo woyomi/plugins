@@ -14,6 +14,11 @@ const sourceId = 'animesorion'
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
 
+const BLOGGER_RPC_URL =
+  'https://www.blogger.com/_/BloggerVideoPlayerUi/data/batchexecute?rpcids=WcwnYd&source-path=%2Fvideo.g&f.sid=1&bl=boq_bloggeruiserver_20260811.01_p0&hl=pt-BR&_reqid=100000&rt=c'
+const BLOGGER_REFERER = 'https://www.blogger.com/'
+const BLOGGER_UA = 'node'
+
 function browserHeaders(referer: string): Record<string, string> {
   return {
     'user-agent': BROWSER_UA,
@@ -119,10 +124,111 @@ interface PlayerFlixResponse {
   data?: { options?: PlayerOption[] }
 }
 
-interface EmbedPlayerVideo {
-  hls?: boolean
-  videoSource?: string
-  securedLink?: string
+/** WcwnYd payload: `[status, null, streams[]]`; each stream starts with a URL. */
+type BloggerVideoInfo = [unknown, unknown, unknown[]?]
+
+function bloggerToken(embed: string | undefined): string | undefined {
+  if (!embed) return undefined
+  try {
+    const url = new URL(embed)
+    if (url.hostname !== 'www.blogger.com' || url.pathname !== '/video.g') return undefined
+    return url.searchParams.get('token') || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Extract the JSON payload from Blogger's XSSI-prefixed, chunked RPC response. */
+function parseBloggerVideoInfo(body: string): BloggerVideoInfo {
+  const start = body.indexOf('[["wrb.fr"')
+  if (start === -1) throw new Error('unexpected Blogger RPC response')
+  for (let i = start; i < body.length; i++) {
+    if (body[i] !== '[') continue
+    let depth = 0
+    let inString = false
+    let escaped = false
+    let end = -1
+    for (let j = i; j < body.length; j++) {
+      const char = body[j]
+      if (inString) {
+        if (escaped) escaped = false
+        else if (char === '\\') escaped = true
+        else if (char === '"') inString = false
+        continue
+      }
+      if (char === '"') inString = true
+      else if (char === '[') depth++
+      else if (char === ']') {
+        depth--
+        if (depth === 0) {
+          end = j + 1
+          break
+        }
+      }
+    }
+    if (end === -1) throw new Error('truncated Blogger RPC response')
+    let frame: unknown
+    try {
+      frame = JSON.parse(body.slice(i, end))
+    } catch {
+      continue
+    }
+    if (!Array.isArray(frame)) continue
+    const payload = (frame as unknown[][]).find((entry) => entry[1] === 'WcwnYd')?.[2]
+    if (typeof payload !== 'string') continue
+    const info = JSON.parse(payload) as BloggerVideoInfo
+    if (Array.isArray(info) && Array.isArray(info[2])) return info
+  }
+  throw new Error('Blogger RPC response carried no video info')
+}
+
+function bloggerQuality(url: URL): string | undefined {
+  const labels: Record<string, string> = {
+    '13': '144p',
+    '17': '144p',
+    '36': '240p',
+    '18': '360p',
+    '59': '480p',
+    '78': '480p',
+    '22': '720p',
+    '37': '1080p'
+  }
+  return labels[url.searchParams.get('itag') ?? '']
+}
+
+async function resolveBloggerStreams(fetch: Parameters<typeof fetchHtml>[0], token: string): Promise<StreamSource[]> {
+  const inner = JSON.stringify([token, null, 0])
+  const body = `f.req=${encodeURIComponent(JSON.stringify([[['WcwnYd', inner, null, 'generic']]]))}&`
+  const res = await fetch(BLOGGER_RPC_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      referer: BLOGGER_REFERER,
+      'user-agent': BLOGGER_UA,
+      'x-same-domain': '1'
+    },
+    body
+  })
+  if (res.status !== 200) throw new Error(`Blogger RPC -> HTTP ${res.status}`)
+  const info = parseBloggerVideoInfo(res.body)
+  const streams: StreamSource[] = []
+  for (const entry of info[2] ?? []) {
+    if (!Array.isArray(entry) || typeof entry[0] !== 'string') continue
+    let url: URL
+    try {
+      url = new URL(entry[0])
+    } catch {
+      continue
+    }
+    if (url.searchParams.get('mime') !== 'video/mp4') continue
+    streams.push({
+      url: entry[0],
+      kind: 'mp4',
+      ...(bloggerQuality(url) ? { quality: bloggerQuality(url) } : {}),
+      headers: { Referer: BLOGGER_REFERER, 'User-Agent': BLOGGER_UA }
+    })
+  }
+  return streams
 }
 
 /** Prefer Portuguese (dublado/legendado) mirrors, then higher quality hints. */
@@ -260,13 +366,27 @@ export function makeAnimesOrionSource(): Source {
       })
       const options = manifest.data?.options ?? []
 
-      // 4) resolve each "VIP Player" option (embedplayer*.xyz/video/<hash>) to a signed direct stream
+      // 4) VIP Player currently exposes CORS-restricted HLS playlists. Resolve the
+      //    Blogger alternatives to signed progressive MP4s instead.
       const streams: StreamSource[] = []
+      const resolvedLanguages = new Set<string>()
       for (const option of options) {
-        const resolved = await resolveEmbedPlayer(ctx.fetch, option, playerFlixUrl)
-        if (!resolved) continue
-        const quality = `${option.label ?? 'Stream'} (${option.lang ?? '??'})`
-        streams.push({ url: resolved.url, kind: resolved.kind, quality })
+        const language = option.lang ?? ''
+        const token = bloggerToken(option.embed)
+        if (!token || resolvedLanguages.has(language)) continue
+        try {
+          const resolved = await resolveBloggerStreams(ctx.fetch, token)
+          if (resolved.length === 0) continue
+          resolvedLanguages.add(language)
+          for (const stream of resolved) {
+            streams.push({
+              ...stream,
+              quality: `Blogger${stream.quality ? ` ${stream.quality}` : ''} (${option.lang ?? '??'})`
+            })
+          }
+        } catch {
+          // PlayerFlix may expose duplicate Blogger choices; try the next one.
+        }
       }
       if (streams.length === 0) {
         const available = options.map((o) => `${o.label ?? '?'}/${o.lang ?? '?'}`).join(', ') || 'none'
@@ -317,39 +437,4 @@ function playerFlixAjaxQuery(playerFlixUrl: string): string {
   const movieId = movieMatch?.[1]
   if (movieId !== undefined) return `?type=movie&id=${movieId}`
   throw new Error(`unrecognized playerflix path: ${path}`)
-}
-
-/**
- * embedplayer*.xyz options expose a FirePlayer api: POST /player/index.php?data=<hash>&do=getVideo
- * returns { videoSource, securedLink } where securedLink is a signed .m3u8 (or .mp4).
- */
-async function resolveEmbedPlayer(
-  fetch: Parameters<typeof fetchHtml>[0],
-  option: PlayerOption,
-  playerFlixUrl: string
-): Promise<{ url: string; kind: 'hls' | 'mp4' } | undefined> {
-  const match = /^https?:\/\/embedplayer\d*\.xyz\/video\/([0-9a-f]+)/.exec(option.embed ?? '')
-  const hash = match?.[1]
-  if (!match || hash === undefined || !option.embed) {
-    return undefined // Blogger / WatchPlayer / Premium servers need JS or accounts
-  }
-  const api = `${new URL(option.embed).origin}/player/index.php?data=${hash}&do=getVideo`
-  const res = await fetchJson<EmbedPlayerVideo>(fetch, api, {
-    method: 'POST',
-    headers: {
-      'user-agent': BROWSER_UA,
-      'content-type': 'application/x-www-form-urlencoded',
-      'x-requested-with': 'XMLHttpRequest',
-      referer: option.embed ?? '',
-      origin: new URL(option.embed).origin,
-      'sec-fetch-dest': 'empty',
-      'sec-fetch-mode': 'cors',
-      'sec-fetch-site': 'same-origin'
-    },
-    body: `hash=${hash}&r=${encodeURIComponent(playerFlixUrl)}`
-  })
-  const url = res.securedLink ?? res.videoSource
-  if (!url) return undefined
-  const isHls = res.hls === true || /\.m3u8($|\?)/.test(url)
-  return { url, kind: isHls ? 'hls' : 'mp4' }
 }

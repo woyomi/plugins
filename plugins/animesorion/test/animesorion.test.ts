@@ -118,20 +118,20 @@ const AJAX_JSON = JSON.stringify({
     title: 'One-Punch Man',
     options: [
       {
-        embed: 'https://www.blogger.com/video.g?token=AD6v5dwhpMA0qGY2P1nbwuGuk-717Uw',
+        embed: 'https://www.blogger.com/video.g?token=pt-token',
         lang: 'pt-br',
+        label: 'Blogger',
+        budget: 'success'
+      },
+      {
+        embed: 'https://www.blogger.com/video.g?token=en-token',
+        lang: 'en-us',
         label: 'Blogger',
         budget: 'success'
       },
       {
         embed: 'https://embedplayer2.xyz/video/6d8601d82d764554c8430f34202031b1',
         lang: 'pt-br',
-        label: 'VIP Player',
-        budget: 'success'
-      },
-      {
-        embed: 'https://embedplayer2.xyz/video/225b13b17df5a65427070216ac0a2b10',
-        lang: 'en-us',
         label: 'VIP Player',
         budget: 'success'
       },
@@ -145,17 +145,16 @@ const AJAX_JSON = JSON.stringify({
   }
 })
 
-const GETVIDEO_PT_JSON = JSON.stringify({
-  hls: true,
-  videoSource: 'https://embedplayer2.xyz/cdn/hls/2b90cf78/master.txt',
-  securedLink: 'https://embedplayer2.xyz/cdn/hls/2b90cf78/master.m3u8?md5=h8G6IcMhwG3XcgeRyQNTUQ&expires=1786902891'
-})
+function bloggerRpc(urls: string[]): string {
+  const payload = JSON.stringify([1, null, urls.map((url) => [url, [18]])])
+  return `)]}'\n\n${JSON.stringify([['wrb.fr', 'WcwnYd', payload]])}`
+}
 
-const GETVIDEO_EN_JSON = JSON.stringify({
-  hls: false,
-  videoSource: 'https://cvt24.embedplayer1.xyz/v/oppm.s1e02.en.mp4',
-  securedLink: null
-})
+const BLOGGER_PT_RPC = bloggerRpc([
+  'https://googlevideo.example/videoplayback?itag=13&mime=video%2F3gpp',
+  'https://googlevideo.example/videoplayback?itag=18&mime=video%2Fmp4'
+])
+const BLOGGER_EN_RPC = bloggerRpc(['https://googlevideo.example/videoplayback?itag=18&mime=video%2Fmp4'])
 
 const AJAX_NOVIP_JSON = JSON.stringify({
   status: true,
@@ -181,11 +180,18 @@ const HOME_HTML = `
 interface FetchLogEntry {
   url: string
   headers?: Record<string, string>
+  body?: string
 }
 
-function fixtureFetch(routes: Record<string, string>, log?: FetchLogEntry[]): FetchFn {
+function fixtureFetch(
+  routes: Record<string, string>,
+  log?: FetchLogEntry[],
+  responseFor?: (url: string, body: string | undefined) => string | undefined
+): FetchFn {
   return async (url, init): Promise<FetchResult> => {
-    log?.push({ url, headers: init?.headers })
+    log?.push({ url, headers: init?.headers, body: init?.body })
+    const dynamic = responseFor?.(url, init?.body)
+    if (dynamic !== undefined) return { status: 200, headers: { 'content-type': 'text/html' }, body: dynamic }
     const key = Object.keys(routes).find((k) => url.includes(k))
     if (!key) return { status: 404, headers: {}, body: `not found: ${url}` }
     return { status: 200, headers: { 'content-type': 'text/html' }, body: routes[key]! }
@@ -265,17 +271,19 @@ describe('animesorion source', () => {
     expect(eps).toEqual([{ id: 'filme:jujutsu-kaisen-0-o-filme', mediaId: 'filme:jujutsu-kaisen-0-o-filme', number: 1, lang: 'pt-br' }])
   })
 
-  it('follows the myembed -> playerflix chain, resolving VIP players to signed direct streams', async () => {
+  it('follows the myembed -> playerflix chain, resolving Blogger choices to proxyable MP4 streams', async () => {
     const log: FetchLogEntry[] = []
     const fetch = fixtureFetch(
       {
         'animesorion.cc/episodios/one-punch-man-2/': EPISODE_PAGE_HTML,
         'myembed.biz/serie/63926/1/2': GATEWAY_HTML,
-        'playerflix.ink/inc/Ajax.php': AJAX_JSON,
-        'data=6d8601d82d764554c8430f34202031b1&do=getVideo': GETVIDEO_PT_JSON,
-        'data=225b13b17df5a65427070216ac0a2b10&do=getVideo': GETVIDEO_EN_JSON
+        'playerflix.ink/inc/Ajax.php': AJAX_JSON
       },
-      log
+      log,
+      (url, body) => {
+        if (!url.includes('batchexecute')) return undefined
+        return body?.includes('pt-token') ? BLOGGER_PT_RPC : body?.includes('en-token') ? BLOGGER_EN_RPC : undefined
+      }
     )
     const media = {
       id: 'animesorion/one-punch-man',
@@ -288,14 +296,14 @@ describe('animesorion source', () => {
     const streams = await animesorion.getStreams!({ ...ctx, fetch }, media, episode)
 
     expect(streams).toHaveLength(2)
-    // pt-br first (qualityScore), signed m3u8, en-us mp4 second
+    // pt-br first (qualityScore); 3gp is skipped in favor of the proxyable MP4.
     expect(streams[0]).toMatchObject({
-      url: 'https://embedplayer2.xyz/cdn/hls/2b90cf78/master.m3u8?md5=h8G6IcMhwG3XcgeRyQNTUQ&expires=1786902891',
-      kind: 'hls',
-      quality: 'VIP Player (pt-br)'
+      url: 'https://googlevideo.example/videoplayback?itag=18&mime=video%2Fmp4',
+      kind: 'mp4',
+      quality: 'Blogger 360p (pt-br)',
+      headers: { Referer: 'https://www.blogger.com/', 'User-Agent': 'node' }
     })
-    expect(streams[1]).toMatchObject({ kind: 'mp4', quality: 'VIP Player (en-us)' })
-    expect(streams[1]?.url).toContain('.mp4')
+    expect(streams[1]).toMatchObject({ kind: 'mp4', quality: 'Blogger 360p (en-us)' })
 
     // the gateway request must carry the animesorion referer (it serves a decoy page otherwise)
     // and browser-like headers (playerflix sits behind Cloudflare)
@@ -307,6 +315,9 @@ describe('animesorion source', () => {
     expect(ajaxCall?.url).toBe('https://playerflix.ink/inc/Ajax.php?type=tv&id=63926&season=1&episode=2')
     expect(ajaxCall?.headers).toMatchObject({ 'x-requested-with': 'XMLHttpRequest' })
     expect(ajaxCall?.headers?.['user-agent']).toMatch(/Mozilla/)
+    const bloggerCall = log.find((e) => e.url.includes('batchexecute'))
+    expect(bloggerCall?.headers).toMatchObject({ referer: 'https://www.blogger.com/', 'user-agent': 'node' })
+    expect(log.some((e) => e.url.includes('embedplayer'))).toBe(false)
   })
 
   it('throws a descriptive error when no server is resolvable (Blogger/Premium only)', async () => {
