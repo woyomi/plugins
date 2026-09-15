@@ -117,7 +117,7 @@ function mapSliderCard(a: Element): Media {
   }
 }
 
-function playerData(playerUrl: string | undefined): string | undefined {
+function playerData(playerUrl: string | null | undefined): string | undefined {
   const data = playerUrl ? /[?&]data=([0-9a-fA-F]+)/.exec(playerUrl)?.[1] : undefined
   return data || undefined
 }
@@ -161,8 +161,19 @@ function extractPlayerVariants(html: string, episode: Episode): PlayerVariant[] 
   const doc = parseHtml(html)
   const variants: PlayerVariant[] = []
   const seen = new Set<string>()
+
+  // Current pages (2026-09) expose the players as `data-player-url` (+
+  // `data-player-label`) attributes on the tab/modal elements.
+  for (const el of Array.from(doc.querySelectorAll<HTMLElement>('[data-player-url]'))) {
+    const data = playerData(el.getAttribute('data-player-url'))
+    if (!data || seen.has(data)) continue
+    seen.add(data)
+    variants.push({ data, label: el.getAttribute('data-player-label')?.trim() || text(el) || '' })
+  }
+  if (variants.length > 0) return variants
+
+  // Legacy pages: onclick="switchPlayer(this, 'https://.../player/index.php?data=<32hex>')"
   for (const btn of Array.from(doc.querySelectorAll<HTMLElement>('button.player-tab-btn'))) {
-    // onclick="switchPlayer(this, 'https://00000410.xyz/player/index.php?data=<32hex>')"
     const playerUrl = /switchPlayer\(\s*this\s*,\s*'([^']+)'\s*\)/.exec(btn.getAttribute('onclick') ?? '')?.[1]
     const data = playerData(playerUrl)
     if (!data || seen.has(data)) continue
@@ -195,12 +206,6 @@ function parseMasterPlaylist(body: string): MasterPlaylist | undefined {
     }
   }
   return undefined
-}
-
-/** "720p" + "Dublado" -> "720p • Dublado". */
-function joinQuality(quality: string | undefined, variant: string): string | undefined {
-  const parts = [quality, variant ? titleCaseVariant(variant) : ''].filter(Boolean)
-  return parts.length > 0 ? parts.join(' • ') : undefined
 }
 
 /** home section id -> slider element id on the homepage */
@@ -250,8 +255,10 @@ export function makeSubanimesSource(): Source {
     },
 
     async getEpisodes(ctx, mediaId): Promise<Episode[]> {
+      // The /data endpoint 403s ("Origem AJAX nao autorizada.") unless the
+      // request carries a same-site Referer.
       const payload = await fetchJson<EpisodesApiResponse>(ctx.fetch, `${BASE}/anime/${mediaId}/data`, {
-        headers: { accept: 'application/json' }
+        headers: { accept: 'application/json', Referer: `${BASE}/` }
       })
       const episodes: Episode[] = []
       for (const item of payload.data?.episodes ?? []) {
@@ -299,7 +306,10 @@ export function makeSubanimesSource(): Source {
         }
         const parsed = parseMasterPlaylist(master)
         if (!parsed) continue
-        const quality = joinQuality(heightToQuality(parsed.height), variant.label)
+        // Each variant is one audio version; declare it structurally so the host
+        // builds an audio menu instead of parsing the quality label.
+        const quality = heightToQuality(parsed.height)
+        const audio = variant.label ? titleCaseVariant(variant.label) : undefined
         // The /m3/ manifest is served without `Access-Control-Allow-Origin`, so a
         // cross-origin browser HLS fetch (hls.js) is CORS-blocked and never starts.
         // Declaring request headers routes the stream through the app's network
@@ -309,6 +319,7 @@ export function makeSubanimesSource(): Source {
           url: parsed.url,
           kind: 'hls',
           ...(quality ? { quality } : {}),
+          ...(audio ? { audio } : {}),
           headers: { Referer: `${BASE}/` }
         })
       }

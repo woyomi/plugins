@@ -93,6 +93,18 @@ var allEpisodesData = [
 var currentSlug = "naruto";
 </script>`
 
+// Live pages (2026-09) carry the players as data-player-url attributes on the
+// tab/modal elements; switchPlayer and allEpisodesData are gone.
+const DATA_PLAYER_EPISODE_HTML = `
+<section class="playerTabs">
+  <div rel="noopener noreferrer" class="playerTab current" data-player-url="https://00000410.xyz/player/index.php?data=47bb42d5daaab5bfea17a96e858b5a7f" data-player-label="DUBLADO"></div>
+  <div rel="noopener noreferrer" class="playerTab" data-player-url="https://00000410.xyz/player/index.php?data=6aa9483f549c490877c01a5baa521371" data-player-label="LEGENDADO"></div>
+</section>
+<div class="playerSwitchModal" id="playerSwitchModal">
+  <div class="playerSwitchModal-item active" data-player-url="https://00000410.xyz/player/index.php?data=47bb42d5daaab5bfea17a96e858b5a7f" data-index="0"><i class="ri-mic-fill"></i>DUBLADO</div>
+  <div class="playerSwitchModal-item" data-player-url="https://00000410.xyz/player/index.php?data=6aa9483f549c490877c01a5baa521371" data-index="1"><i class="ri-closed-captioning-fill"></i>LEGENDADO</div>
+</div>`
+
 const MASTER_DUB = `#EXTM3U
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=1755223,RESOLUTION=1280x720,FRAME-RATE=23.974,CODES="avc1.64001f,mp4a.40.2"
 https://00000410.xyz/m3/b0JRaCtrOTM2cWZYSkY4MlRvbHU3MXR3OWYvZnpEdGdMN0dNT2tYM3JNeXg1UUtyOC9rSVFDWDFYWXhvVTV1S29ZdktPem9CQktxdGlhYm1wbGNIR29STjA3NVQ
@@ -208,7 +220,10 @@ describe('subanimes source', () => {
   })
 
   it('parses episodes with numbers, seasons and stable ids, dropping default titles', async () => {
-    const eps = await subanimes.getEpisodes({ ...ctx, fetch: fixtureFetch({ '/anime/jujutsu-kaisen/data': EPISODES_JSON }) }, 'jujutsu-kaisen')
+    const rec = recordingFetch(fixtureFetch({ '/anime/jujutsu-kaisen/data': EPISODES_JSON }))
+    const eps = await subanimes.getEpisodes({ ...ctx, fetch: rec.fetch }, 'jujutsu-kaisen')
+    // the /data endpoint 403s without a same-site Referer
+    expect(rec.inits[0]?.headers).toMatchObject({ Referer: 'https://subanimes.org/' })
     expect(eps).toHaveLength(3)
     expect(eps[0]).toMatchObject({ number: 1, season: 1, mediaId: 'jujutsu-kaisen', lang: 'pt-br' })
     expect(eps[0]?.id).toBe('subanimes/jujutsu-kaisen/1x1')
@@ -238,14 +253,40 @@ describe('subanimes source', () => {
     expect(rec.urls[0]).toBe('https://subanimes.org/ep/naruto-1-episodio-1')
     expect(streams).toHaveLength(2) // season 2's same-numbered episode is ignored
     expect(rec.inits[1]?.headers).toMatchObject({ Referer: 'https://subanimes.org/' })
-    expect(streams[0]).toMatchObject({ kind: 'hls', quality: '720p • Dublado' })
+    expect(streams[0]).toMatchObject({ kind: 'hls', quality: '720p', audio: 'Dublado' })
     expect(streams[0]?.url).toMatch(/^https:\/\/00000410\.xyz\/m3\//)
     // manifest is served without ACAO; the app's network loader sends the declared
     // Referer so it can fetch the CORS-blocked /m3/ playlist natively
     expect(streams[0]?.headers).toEqual({ Referer: 'https://subanimes.org/' })
-    expect(streams[1]).toMatchObject({ kind: 'hls', quality: '480p • Legendado' })
+    expect(streams[1]).toMatchObject({ kind: 'hls', quality: '480p', audio: 'Legendado' })
     expect(streams[1]?.url).toMatch(/^https:\/\/00000410\.xyz\/m3\//)
     expect(streams[0]?.url).not.toBe(streams[1]?.url)
+  })
+
+  it('resolves data-player-url tabs (current 2026-09 markup) into HLS streams', async () => {
+    const media = {
+      id: 'subanimes/naruto',
+      mediaId: 'naruto',
+      sourceId: 'subanimes',
+      title: 'Naruto',
+      type: 'anime' as const
+    }
+    const episode = { id: 'subanimes/naruto/1x1', mediaId: 'naruto', number: 1, season: 1, lang: 'pt-br' }
+    const streams = await subanimes.getStreams!(
+      {
+        ...ctx,
+        fetch: fixtureFetch({
+          '/ep/naruto-1-episodio-1': DATA_PLAYER_EPISODE_HTML,
+          '/hls/47bb42d5daaab5bfea17a96e858b5a7f/master.txt': MASTER_DUB,
+          '/hls/6aa9483f549c490877c01a5baa521371/master.txt': MASTER_LEG
+        })
+      },
+      media,
+      episode
+    )
+    expect(streams).toHaveLength(2) // modal duplicates dedupe by data token
+    expect(streams[0]).toMatchObject({ kind: 'hls', quality: '720p', audio: 'Dublado' })
+    expect(streams[1]).toMatchObject({ kind: 'hls', quality: '480p', audio: 'Legendado' })
   })
 
   it('skips a variant whose master playlist fails to resolve but keeps the others', async () => {
@@ -264,7 +305,8 @@ describe('subanimes source', () => {
       episode
     )
     expect(streams).toHaveLength(1)
-    expect(streams[0]?.quality).toBe('480p • Legendado')
+    expect(streams[0]?.quality).toBe('480p')
+    expect(streams[0]?.audio).toBe('Legendado')
   })
 
   it('exposes homepage sections backed by the four sliders', async () => {

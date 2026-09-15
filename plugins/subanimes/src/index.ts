@@ -11,7 +11,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'subanimes',
     name: 'SubAnimes',
-    version: '0.1.2',
+    version: '0.1.4',
     apiVersion: API_VERSION,
     lang: 'pt-br',
     description: 'SubAnimes — animes dublados e legendados via HLS (subanimes.org)',

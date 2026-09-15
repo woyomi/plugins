@@ -11,8 +11,8 @@ importers:
   plugins/animefire:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: ^0.4.0
+        version: 0.4.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -141,8 +141,8 @@ importers:
   plugins/subanimes:
     dependencies:
       '@woyomi/core':
-        specifier: ^0.3.0
-        version: 0.3.0
+        specifier: ^0.4.0
+        version: 0.4.0
     devDependencies:
       '@woyomi/plugin-builder':
         specifier: ^0.1.0
@@ -526,6 +526,10 @@ packages:
 
   '@woyomi/core@0.3.0':
     resolution: {integrity: sha512-x8sqQ6nMLY4IImjiC3w3v4zATZz02VqLHcmsy2xu+n0JbBL3qfmChmydDN8tYyc4TesaKqRqDq3W4u48QfW19A==}
+    engines: {node: '>=20'}
+
+  '@woyomi/core@0.4.0':
+    resolution: {integrity: sha512-gUEZSIYz1U+TTsnipisoQ1cx/WQBIRyUx8tL1FY4NjNlj7+BppH8amRX1Trv7TStv6DxkYr6pNHIybBZViU25A==}
     engines: {node: '>=20'}
 
   '@woyomi/plugin-builder@0.1.0':
@@ -1049,6 +1053,10 @@ snapshots:
       zod: 3.25.76
 
   '@woyomi/core@0.3.0':
+    dependencies:
+      zod: 3.25.76
+
+  '@woyomi/core@0.4.0':
     dependencies:
       zod: 3.25.76
 
