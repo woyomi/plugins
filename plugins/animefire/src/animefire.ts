@@ -1,8 +1,8 @@
 import type { ChapterContent, Episode, HomeSection, Media, SearchResults, Source, StreamSource } from '@woyomi/core'
 import { fetchJson } from '@woyomi/core'
 
-const BASE = 'https://animefire.io'
-const API = 'https://api.animefire.io'
+const BASE = 'https://animefire.one'
+const API = 'https://api.animefire.one'
 const sourceId = 'animefire'
 
 interface AnimeListItem {

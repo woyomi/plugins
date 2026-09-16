@@ -4,7 +4,7 @@ import type { FetchFn, FetchResult } from '@woyomi/core'
 
 const animefire = makeAnimefireSource()
 
-// Representative shapes modeled on https://api.animefire.io responses (2026-09);
+// Representative shapes modeled on https://api.animefire.one responses (2026-09);
 // trimmed to the relevant parts (quality lists vary per episode).
 const SEARCH_JSON = JSON.stringify({
   data: [
@@ -200,7 +200,7 @@ describe('animefire source', () => {
       return { status: 200, headers: { 'content-type': 'application/json' }, body: SEARCH_JSON }
     }
     const res = await animefire.search({ ...ctx, fetch }, 'naruto', 1)
-    expect(called).toBe('https://api.animefire.io/animes/pesquisar?q=naruto&page=1')
+    expect(called).toBe('https://api.animefire.one/animes/pesquisar?q=naruto&page=1')
     expect(res.items.map((m) => m.mediaId)).toEqual(['eU7t5IvcNKU', 'V2Q_qcvaKhb'])
     expect(res.items[0]).toMatchObject({
       id: 'animefire/eU7t5IvcNKU',
@@ -219,7 +219,7 @@ describe('animefire source', () => {
       return { status: 200, headers: { 'content-type': 'application/json' }, body: SEARCH_JSON }
     }
     await animefire.search({ ...ctx, fetch }, 'one piece', 2)
-    expect(called).toBe('https://api.animefire.io/animes/pesquisar?q=one%20piece&page=2')
+    expect(called).toBe('https://api.animefire.one/animes/pesquisar?q=one%20piece&page=2')
     const last = await animefire.search(
       { ...ctx, fetch: fixtureFetch({ '/animes/pesquisar': SEARCH_LAST_PAGE_JSON }) },
       'naruto',
@@ -269,7 +269,7 @@ describe('animefire source', () => {
       return { status: 200, headers: { 'content-type': 'application/json' }, body: MEDIA_JSON }
     }
     await animefire.getMedia({ ...ctx, fetch }, 'eU7t5IvcNKU')
-    expect(called).toBe('https://api.animefire.io/anime/eU7t5IvcNKU')
+    expect(called).toBe('https://api.animefire.one/anime/eU7t5IvcNKU')
   })
 
   it('parses the episode list with opaque ids', async () => {
@@ -299,13 +299,13 @@ describe('animefire source', () => {
       return { status: 200, headers: { 'content-type': 'application/json' }, body: EPISODE_JSON }
     }
     const streams = await animefire.getStreams!({ ...ctx, fetch }, media, episode)
-    expect(called).toBe('https://api.animefire.io/episode/WCrJufyJmQn')
+    expect(called).toBe('https://api.animefire.one/episode/WCrJufyJmQn')
     expect(streams).toHaveLength(2)
     expect(streams[0]?.quality).toBe('1080p')
     expect(streams[0]?.audio).toBe('Legendado')
     expect(streams[0]?.kind).toBe('hls')
     expect(streams[0]?.url).toContain('akumast.net')
-    expect(streams[0]?.headers).toEqual({ Referer: 'https://animefire.io/' })
+    expect(streams[0]?.headers).toEqual({ Referer: 'https://animefire.one/' })
     expect(streams[1]?.quality).toBe('480p')
     expect(streams[1]?.audio).toBe('Dublado')
   })
