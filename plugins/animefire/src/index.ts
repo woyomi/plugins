@@ -11,7 +11,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'animefire',
     name: 'AnimeFire',
-    version: '0.2.1',
+    version: '0.2.2',
     apiVersion: API_VERSION,
     lang: 'pt-br',
     description: 'AnimeFire — animes legendados e dublados (API JSON)',
