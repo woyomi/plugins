@@ -4,20 +4,20 @@ import type { FetchFn, FetchResult } from '@woyomi/core'
 
 const animefire = makeAnimefireSource()
 
-// Representative shapes modeled on https://api.animefire.one responses (2026-09);
+// Representative shapes modeled on https://api.animefire.one responses (2026-10);
 // trimmed to the relevant parts (quality lists vary per episode).
 const SEARCH_JSON = JSON.stringify({
   data: [
     {
       id: 'eU7t5IvcNKU',
-      title: 'Naruto',
+      titles: { BR: 'Naruto' },
       audio: 'Dublado & Legendado',
       poster_src: 'https://image.tmdb.org/t/p/original/aWR1IFE7zpUF0ANqvBPMomyRVgZ.jpg',
       status: 'completed'
     },
     {
       id: 'V2Q_qcvaKhb',
-      title: 'Naruto Shippuden',
+      titles: { BR: 'Naruto Shippuden', US: 'Naruto: Shippuden', JP: 'NARUTO: Shippuuden' },
       audio: 'Dublado & Legendado',
       poster_src: 'https://image.tmdb.org/t/p/original/nRJmByfK9XdtOY73VArcN8KpKVs.jpg',
       status: 'completed'
@@ -26,6 +26,7 @@ const SEARCH_JSON = JSON.stringify({
   meta: { current_page: 1, last_page: 3, total: 67, per_page: 30 }
 })
 
+// Legacy flat `title` items (pre-`titles` API) must keep mapping.
 const SEARCH_LAST_PAGE_JSON = JSON.stringify({
   data: [
     {
@@ -126,7 +127,7 @@ const HOME_JSON = JSON.stringify({
         items: [
           {
             id: 'mbXq3Z3H_1B',
-            title: 'Red River',
+            titles: { BR: 'Red River' },
             audio: 'Legendado',
             season: 1,
             number: 10,
@@ -141,7 +142,7 @@ const HOME_JSON = JSON.stringify({
         items: [
           {
             id: 'ov64ogULzyS',
-            title: 'Mushoku Tensei: Jobless Reincarnation',
+            titles: { BR: 'Mushoku Tensei: Jobless Reincarnation' },
             audio: 'Dublado & Legendado',
             poster_src: 'https://image.tmdb.org/t/p/original/gLKOYIMyKlUHW0SVdskhgf9C0yy.jpg',
             status: 'airing'
@@ -155,7 +156,7 @@ const HOME_JSON = JSON.stringify({
         items: [
           {
             id: 'rhCrJm9M5FH',
-            title: 'Tefuda ga Oome no Victoria',
+            titles: { US: 'Tefuda ga Oome no Victoria' },
             audio: 'Legendado',
             poster_src: 'https://image.tmdb.org/t/p/original/tefuda.webp',
             status: 'airing'
@@ -227,6 +228,7 @@ describe('animefire source', () => {
     )
     expect(last.hasNextPage).toBe(false)
     expect(last.items[0]?.mediaId).toBe('aaR8yQjuBBQ')
+    expect(last.items[0]?.title).toBe('Boruto: Naruto O Filme')
   })
 
   it('returns no results without fetching for blank queries', async () => {
@@ -342,6 +344,7 @@ describe('animefire source', () => {
     expect(liked.hasNextPage).toBe(false)
     const fresh = await animefire.getHomeSection!({ ...ctx, fetch }, 'new-animes', 1)
     expect(fresh.items.map((m) => m.mediaId)).toEqual(['rhCrJm9M5FH'])
+    expect(fresh.items[0]?.title).toBe('Tefuda ga Oome no Victoria')
     await expect(animefire.getHomeSection!({ ...ctx, fetch }, 'unknown', 1)).rejects.toThrow(
       'unknown homepage section'
     )

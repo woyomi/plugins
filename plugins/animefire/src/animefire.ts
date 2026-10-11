@@ -7,7 +7,10 @@ const sourceId = 'animefire'
 
 interface AnimeListItem {
   id: string
-  title: string
+  /** Localized titles as served by the 2026-10 API (`{ BR?, US?, JP? }`). */
+  titles?: Record<string, string>
+  /** Flat title from older payloads; kept as a fallback. */
+  title?: string
   audio?: string
   poster_src?: string
   poster_srcset?: string
@@ -94,7 +97,7 @@ function mapListItem(item: AnimeListItem): Media {
     id: `${sourceId}/${item.id}`,
     mediaId: item.id,
     sourceId,
-    title: item.title?.trim() || 'Untitled',
+    title: listItemTitle(item),
     type: 'anime',
     coverUrl: item.poster_src || undefined
   }
@@ -111,6 +114,12 @@ function mapStatus(label: string | undefined): Media['status'] {
 function primaryTitle(titles: Record<string, string> | undefined): string {
   if (!titles) return 'Untitled'
   return titles.BR ?? titles.JP ?? titles.US ?? Object.values(titles)[0] ?? 'Untitled'
+}
+
+/** List cards carry localized `titles`; older payloads only had a flat `title`. */
+function listItemTitle(item: AnimeListItem): string {
+  const localized = primaryTitle(item.titles)
+  return localized !== 'Untitled' ? localized : item.title?.trim() || 'Untitled'
 }
 
 function altTitles(titles: Record<string, string> | undefined, primary: string): string[] | undefined {
