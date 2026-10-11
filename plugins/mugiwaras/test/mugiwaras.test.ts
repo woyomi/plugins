@@ -405,7 +405,7 @@ describe('mugiwaras source', () => {
       let gateWalks = 0
       let keyHeaders: Record<string, string> = {}
       let callbackRedirect: string | undefined
-      const fetch: FetchFn = async (url, init) => {
+      const fetch: FetchFn = async (url, init): Promise<FetchResult> => {
         if (url.includes('/gate-token')) {
           gateWalks++
           return { status: 200, headers: {}, body: JSON.stringify({ data: { token: 'gate-1', gateUrl: 'https://redenovax.example/jump/x' } }) }
@@ -452,7 +452,7 @@ describe('mugiwaras source', () => {
       const pagesJson = JSON.stringify({
         data: { chapterId: '7', pages: [{ index: 1, imageUrl: craftToken(1, 99999), width: 0, height: 0, isDouble: false }] }
       })
-      const fetch: FetchFn = async (url) => {
+      const fetch: FetchFn = async (url): Promise<FetchResult> => {
         if (url.includes('/gate-token')) return { status: 200, headers: {}, body: JSON.stringify({ data: { token: 'gate-2' } }) }
         // An older app or a browser runtime follows the 307 and exposes no cookies.
         if (url.includes('/gate/callback')) return { status: 200, headers: {}, body: '<html></html>' }
