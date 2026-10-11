@@ -220,6 +220,20 @@ describe('mugiwaras source', () => {
     expect(called).toBe('https://app.mugiwarasoficial.com/v1/www/search?q=one%20piece')
   })
 
+  it('sends browser fetch-metadata headers so Cloudflare lets the API through', async () => {
+    let sent: Record<string, string> = {}
+    const fetch: FetchFn = async (_url, init) => {
+      sent = init?.headers ?? {}
+      return { status: 200, headers: { 'content-type': 'application/json' }, body: SEARCH_JSON }
+    }
+    await mugiwaras.search({ ...ctx, fetch }, 'one piece', 1)
+    expect(sent['user-agent']).toContain('Mozilla/5.0')
+    expect(sent['sec-fetch-dest']).toBe('empty')
+    expect(sent['sec-fetch-mode']).toBe('cors')
+    expect(sent['sec-fetch-site']).toBe('same-site')
+    expect(sent.accept).toBe('application/json')
+  })
+
   it('maps search cards (manhwa/manhua included as manga) with no pagination', async () => {
     const res = await mugiwaras.search({ ...ctx, fetch: fixtureFetch({ '/search?q=': SEARCH_JSON }) }, 'one piece', 1)
     expect(res.items.map((m) => m.mediaId)).toEqual(['one-piece', 'one-piece-gakuen'])

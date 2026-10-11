@@ -1,5 +1,5 @@
 import type { ChapterContent, Episode, HomeSection, Media, MediaStatus, SearchResults, Source } from '@woyomi/core'
-import { fetchJson } from '@woyomi/core'
+import { fetchJson, jsonHeaders } from '@woyomi/core'
 
 /**
  * Mugiwaras Oficial (mugiwarasoficial.com) is a Brazilian manga/manhwa/manhua
@@ -23,6 +23,21 @@ const PAGE_HEADERS = {
   Referer: `${SITE}/`,
   'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
 }
+
+/**
+ * Cloudflare fronts app.mugiwarasoficial.com with a managed challenge keyed on
+ * browser fetch metadata: verified live, a plain UA (even with accept/origin)
+ * gets 403 "Just a moment...", while a browser User-Agent + `Sec-Fetch-*`
+ * passes. Sent on every API call.
+ */
+const API_HEADERS = {
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  'sec-fetch-dest': 'empty',
+  'sec-fetch-mode': 'cors',
+  'sec-fetch-site': 'same-site'
+}
+
+const apiInit = { headers: jsonHeaders(API_HEADERS) }
 
 /** Highest chapter-list page count we will walk before giving up (defensive). */
 const MAX_CHAPTER_PAGES = 50
@@ -158,14 +173,14 @@ export function makeMugiwarasSource(): Source {
     lang: 'pt-br',
 
     async search(ctx, query, page): Promise<SearchResults> {
-      const res = await fetchJson<SearchResponse>(ctx.fetch, `${API}/search?q=${encodeURIComponent(query.trim())}`)
+      const res = await fetchJson<SearchResponse>(ctx.fetch, `${API}/search?q=${encodeURIComponent(query.trim())}`, apiInit)
       const items = (res.data ?? []).filter(hasSlug).map(mapCard)
       // the endpoint caps results at meta.limit (8) and has no pagination
       return { page, hasNextPage: false, items }
     },
 
     async getMedia(ctx, mediaId): Promise<Media> {
-      const res = await fetchJson<WorkDetailResponse>(ctx.fetch, `${API}/works/${mediaId}`)
+      const res = await fetchJson<WorkDetailResponse>(ctx.fetch, `${API}/works/${mediaId}`, apiInit)
       const w = res.data
       const altTitles = (w.altTitles ?? []).map((t) => t.trim()).filter(Boolean)
       return {
@@ -190,7 +205,8 @@ export function makeMugiwarasSource(): Source {
       do {
         const res = await fetchJson<ChapterListResponse>(
           ctx.fetch,
-          `${API}/works/${mediaId}/chapters?limit=100&page=${page}`
+          `${API}/works/${mediaId}/chapters?limit=100&page=${page}`,
+          apiInit
         )
         chapters.push(...(res.data ?? []))
         totalPages = Math.max(1, res.meta?.totalPages ?? 1)
@@ -220,7 +236,7 @@ export function makeMugiwarasSource(): Source {
 
     async getChapterContent(ctx, _mediaId, episodeId): Promise<ChapterContent> {
       const { slug, number } = parseEpisodeId(episodeId)
-      const res = await fetchJson<PagesResponse>(ctx.fetch, `${API}/works/${slug}/chapters/${number}/pages`)
+      const res = await fetchJson<PagesResponse>(ctx.fetch, `${API}/works/${slug}/chapters/${number}/pages`, apiInit)
       const pages = (res.data?.pages ?? []).slice().sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
       const images = pages.map((p) => p.imageUrl).filter((u): u is string => typeof u === 'string' && u.length > 0)
       if (images.length === 0) throw new Error(`no pages found for ${slug} chapter ${number}`)
@@ -239,7 +255,7 @@ export function makeMugiwarasSource(): Source {
       if (page > 1) return { page, hasNextPage: false, items: [] }
       const payloadKey = HOME_SECTION_KEYS[sectionId]
       if (!payloadKey) throw new Error(`unknown homepage section: ${sectionId}`)
-      const res = await fetchJson<HomeResponse>(ctx.fetch, `${API}/home`)
+      const res = await fetchJson<HomeResponse>(ctx.fetch, `${API}/home`, apiInit)
       const section = res.data?.[payloadKey]
       if (!Array.isArray(section)) throw new Error(`unknown homepage section: ${sectionId}`)
       const items = (section as WorkSummary[]).filter(hasSlug).map(mapCard)
