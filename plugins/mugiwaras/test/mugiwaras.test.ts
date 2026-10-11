@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { makeMugiwarasSource } from '../src/mugiwaras.js'
 import type { FetchFn, FetchResult } from '@woyomi/core'
 
@@ -140,6 +140,48 @@ const PAGES_JSON = JSON.stringify({
     ]
   }
 })
+
+// Real `atfield` capture (2026-10) of /v1/www/works/one-piece/chapters/1189/pages:
+// encrypted tokens plus the key the site serves and the URLs they decrypt to.
+const REAL_TOKEN_KEY = 'SoCEMLs43mfOKs+dh74EuTxAvuLpCvHNaFzEjbT7ZQE='
+const TOKEN_PAGES_JSON = JSON.stringify({
+  data: {
+    chapterId: '1189',
+    pages: [
+      {
+        index: 2,
+        imageUrl:
+          'AQAAUQGtWuvim4llkyGovVSks6H4d01mdMbaHrbStHkSvgzDTzGVnfEUBRHSDg0LdQ0kYV3nApdkXmVypOwil0FtUKJAnhLRVOCWlJrScAsdeVIkuY1ram1QW7hwXpJd6T4Pv5tGGfWESiUGzfkRTMrHNPLgBWhM0_WitZkvFX8xHuk0OG27td863A',
+        width: 0,
+        height: 0,
+        isDouble: false
+      },
+      {
+        index: 1,
+        imageUrl:
+          'AQAAUQGHescgbhCoVnVzHpvTYphygda9wMxizshrC8Hxj5TCLTaXrC7Vici81TexIBJoBRZGL2lJlqLPC_NNBoIIS3vMOe5TU5y82Fojz4nxcg_aghfG0DlowG0_JySHqmJvuyJKKwGMqzpwuhoqsURWAttuqQaz_K6IleD_o7cHjCZvUoxayf3s9Q',
+        width: 0,
+        height: 0,
+        isDouble: false
+      }
+    ]
+  }
+})
+const REAL_TOKEN_URLS = [
+  'https://aurora.snipercache.com/manga/one-piece/cap1189/page-0001-v1785078909692.webp?sig=gTlaJRV1RSTZZhMykzTjXA&exp=1791762957',
+  'https://aurora.snipercache.com/manga/one-piece/cap1189/page-0002-v1785078909859.webp?sig=6MzXhUuhuJGNukkT5Pk2QQ&exp=1791762957'
+]
+
+/** A well-formed token with an arbitrary key version (never needs to decrypt). */
+function craftToken(keyId: number, version: number): string {
+  const bytes = new Uint8Array(17)
+  bytes[0] = keyId
+  bytes[1] = (version >>> 24) & 255
+  bytes[2] = (version >>> 16) & 255
+  bytes[3] = (version >>> 8) & 255
+  bytes[4] = version & 255
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
 const HOME_JSON = JSON.stringify({
   data: {
@@ -335,7 +377,7 @@ describe('mugiwaras source', () => {
     )
     if (content.type !== 'pages') throw new Error('unreachable')
     expect(content.headers).toEqual({
-      Referer: 'https://mugiwarasoficial.com/',
+      Referer: 'https://mugiwarasoficial.org/',
       'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36'
     })
   })
@@ -355,6 +397,74 @@ describe('mugiwaras source', () => {
     await expect(
       mugiwaras.getChapterContent({ ...ctx, fetch: fixtureFetch({ '/chapters/1/pages': empty }) }, 'one-piece', 'mugiwaras/one-piece/1')
     ).rejects.toThrow('no pages found')
+  })
+
+  it('walks the gate and decrypts atfield page tokens, caching the key', async () => {
+    vi.useFakeTimers()
+    try {
+      let gateWalks = 0
+      let keyHeaders: Record<string, string> = {}
+      let callbackRedirect: string | undefined
+      const fetch: FetchFn = async (url, init) => {
+        if (url.includes('/gate-token')) {
+          gateWalks++
+          return { status: 200, headers: {}, body: JSON.stringify({ data: { token: 'gate-1', gateUrl: 'https://redenovax.example/jump/x' } }) }
+        }
+        if (url.includes('redenovax.example')) return { status: 200, headers: {}, body: 'ad' }
+        if (url.includes('/gate/callback')) {
+          callbackRedirect = (init as { redirect?: string } | undefined)?.redirect
+          return {
+            status: 307,
+            headers: {
+              location: 'https://mugiwarasoficial.org/manga/one-piece/1189',
+              'set-cookie': 'mnx_gate_binding=bind1; Path=/; HttpOnly\nmnx_gate_h1=jwt1; Path=/; HttpOnly'
+            },
+            body: ''
+          }
+        }
+        if (url.includes('/api/atfield/key')) {
+          keyHeaders = init?.headers ?? {}
+          return { status: 200, headers: {}, body: JSON.stringify({ v: 1, e: 20737, k: REAL_TOKEN_KEY }) }
+        }
+        return { status: 200, headers: {}, body: TOKEN_PAGES_JSON }
+      }
+      const first = mugiwaras.getChapterContent({ ...ctx, fetch }, 'one-piece', 'mugiwaras/one-piece/1189')
+      await vi.advanceTimersByTimeAsync(10_000)
+      const content = await first
+      if (content.type !== 'pages') throw new Error('unreachable')
+      expect(content.images).toEqual(REAL_TOKEN_URLS)
+      expect(callbackRedirect).toBe('manual')
+      expect(keyHeaders.cookie).toBe('mnx_gate_binding=bind1; mnx_gate_h1=jwt1')
+      expect(keyHeaders.referer).toBe('https://mugiwarasoficial.org/manga/one-piece/1189')
+
+      const second = await mugiwaras.getChapterContent({ ...ctx, fetch }, 'one-piece', 'mugiwaras/one-piece/1189')
+      if (second.type !== 'pages') throw new Error('unreachable')
+      expect(second.images).toEqual(REAL_TOKEN_URLS)
+      expect(gateWalks).toBe(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('fails with a runtime hint when gate cookies cannot be read', async () => {
+    vi.useFakeTimers()
+    try {
+      const pagesJson = JSON.stringify({
+        data: { chapterId: '7', pages: [{ index: 1, imageUrl: craftToken(1, 99999), width: 0, height: 0, isDouble: false }] }
+      })
+      const fetch: FetchFn = async (url) => {
+        if (url.includes('/gate-token')) return { status: 200, headers: {}, body: JSON.stringify({ data: { token: 'gate-2' } }) }
+        // An older app or a browser runtime follows the 307 and exposes no cookies.
+        if (url.includes('/gate/callback')) return { status: 200, headers: {}, body: '<html></html>' }
+        return { status: 200, headers: {}, body: pagesJson }
+      }
+      const pending = mugiwaras.getChapterContent({ ...ctx, fetch }, 'one-piece', 'mugiwaras/one-piece/7')
+      const assertion = expect(pending).rejects.toThrow('unreadable in this runtime')
+      await vi.advanceTimersByTimeAsync(10_000)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('exposes the two non-redundant home sections and maps their items', async () => {
