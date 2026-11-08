@@ -2,10 +2,10 @@
 import { createServer } from 'node:http'
 import { readFile, stat } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { join, normalize } from 'node:path'
+import { join, normalize, resolve } from 'node:path'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const repoDir = join(root, 'repo')
+const repoDir = process.env.REPO_DIR ? resolve(process.env.REPO_DIR) : join(root, 'repo')
 const port = Number(process.env.PORT || 8787)
 const host = process.env.HOST || '0.0.0.0'
 

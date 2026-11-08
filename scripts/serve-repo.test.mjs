@@ -2,12 +2,18 @@ import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 import { after, before, test } from 'node:test'
 import { once } from 'node:events'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 let server
 let base
+let repoDir
 before(async () => {
+  repoDir = await mkdtemp(join(tmpdir(), 'woyomi-repo-test-'))
+  await writeFile(join(repoDir, 'index.json'), JSON.stringify({ plugins: [] }))
   server = spawn(process.execPath, [new URL('./serve-repo.mjs', import.meta.url).pathname], {
-    env: { ...process.env, HOST: '127.0.0.1', PORT: '0' }, stdio: ['ignore', 'pipe', 'pipe']
+    env: { ...process.env, HOST: '127.0.0.1', PORT: '0', REPO_DIR: repoDir }, stdio: ['ignore', 'pipe', 'pipe']
   })
   base = await new Promise((resolve, reject) => {
     server.once('error', reject)
@@ -19,10 +25,12 @@ before(async () => {
   })
 })
 after(async () => {
-  if (!server || server.exitCode !== null) return
-  const exited = once(server, 'exit')
-  server.kill()
-  await exited
+  if (server && server.exitCode === null) {
+    const exited = once(server, 'exit')
+    server.kill()
+    await exited
+  }
+  if (repoDir) await rm(repoDir, { recursive: true, force: true })
 })
 
 test('malformed URL paths return 400 without crashing the server', async () => {
