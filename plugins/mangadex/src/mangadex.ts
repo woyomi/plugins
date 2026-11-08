@@ -49,6 +49,8 @@ interface ChapterResult {
       title?: string | null
       publishedAt?: string
       pages?: number
+      externalUrl?: string | null
+      isUnavailable?: boolean
     }
   }>
   total?: number
@@ -130,8 +132,8 @@ const HOME_SECTIONS = [
 ] as const
 
 /**
- * One MangaDex source per language. Search filters by availability so every
- * result is guaranteed to have chapters in this language; the feed requests
+ * One MangaDex source per language. Search filters by advertised language
+ * availability (which can include external-only chapters); the feed requests
  * only this language so chapter lists never mix languages.
  * ponytail: no per-source dedupe across languages — accepted (fragmented
  * library is intentional). If unification is ever wanted, key library rows by
@@ -185,6 +187,9 @@ export function makeMangadexSource(def: MangadexLangDef): Source {
           const json = await fetchJson<ChapterResult>(ctx.fetch, API.chapters(mediaId, offset, lang), { headers: jsonHeaders() })
           if (json.data.length === 0) break
           for (const ch of json.data) {
+            // External-only and unavailable chapters cannot be read by at-home.
+            // Skip before deduplication so a hosted alternative can still win.
+            if (ch.attributes.externalUrl || ch.attributes.isUnavailable || ch.attributes.pages === 0) continue
             const num = ch.attributes.chapter ? Number(ch.attributes.chapter) : Number.NaN
             const vol = ch.attributes.volume ? Number(ch.attributes.volume) : undefined
             // key on volume+number so series that restart numbering per volume keep every chapter
@@ -212,9 +217,10 @@ export function makeMangadexSource(def: MangadexLangDef): Source {
       const server = await fetchJson<ChapterServer>(ctx.fetch, API.chapter(chapterUuid), { headers: jsonHeaders() })
       const hash = server.chapter.hash
       const files = server.chapter.data
-      const useDataSaver = await ctx.preferences.getWithDefault('dataSaver', true)
+      const useDataSaver = (await ctx.preferences.getWithDefault('dataSaver', true)) && server.chapter.dataSaver.length > 0
       const base = useDataSaver ? API.dataSaver(server.baseUrl, hash) : API.pages(server.baseUrl, hash)
       const images = useDataSaver ? server.chapter.dataSaver.map((f) => `${base}/${f}`) : files.map((f) => `${base}/${f}`)
+      if (!images.length) throw new Error(`chapter ${chapterUuid} has no readable pages`)
       return { type: 'pages', images }
     }
   }

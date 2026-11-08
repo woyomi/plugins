@@ -212,13 +212,29 @@ describe('mangadex source', () => {
     expect(eps[0]?.id).toBe('mangadex-ptbr/abc-123/ch-1')
   })
 
-  it('returns an empty pages view for an image-less chapter', async () => {
-    const content = await mangaDexSource.getChapterContent(
+  it('rejects an image-less chapter rather than opening a blank reader', async () => {
+    await expect(mangaDexSource.getChapterContent(
       { ...ctx, fetch: fixtureFetch({ '/at-home': emptyServerFixture }) },
       'abc-123',
       'ch-1'
-    )
-    expect(content).toEqual({ type: 'pages', images: [] })
+    )).rejects.toThrow('no readable pages')
+  })
+
+  it('skips external, unavailable, and zero-page chapters before deduplication', async () => {
+    const data = [
+      { id: 'external', attributes: { chapter: '1', externalUrl: 'https://example.org/chapter', pages: 0 } },
+      { id: 'unavailable', attributes: { chapter: '1', isUnavailable: true, pages: 20 } },
+      { id: 'empty', attributes: { chapter: '1', pages: 0 } },
+      { id: 'hosted', attributes: { chapter: '1', pages: 20 } }
+    ]
+    const episodes = await mangaDexSource.getEpisodes({ ...ctx, fetch: fixtureFetch({ '/feed?': { data, total: data.length } }) }, 'abc-123')
+    expect(episodes.map((e) => e.id)).toEqual(['mangadex-en/abc-123/hosted'])
+  })
+
+  it('falls back to original images when data-saver images are missing', async () => {
+    const server = { ...serverFixture, chapter: { ...serverFixture.chapter, dataSaver: [] } }
+    const content = await mangaDexSource.getChapterContent({ ...ctx, fetch: fixtureFetch({ '/at-home': server }) }, 'abc-123', 'ch-1')
+    expect(content).toEqual({ type: 'pages', images: ['https://uploads.mangadex.org/data/HASH/1.png', 'https://uploads.mangadex.org/data/HASH/2.png'] })
   })
 
   it('parses getMedia when data is a single entity (not an array)', async () => {

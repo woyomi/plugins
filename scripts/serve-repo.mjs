@@ -29,10 +29,18 @@ const server = createServer(async (req, res) => {
     return
   }
 
-  const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`)
-  let pathname = decodeURIComponent(url.pathname)
+  let pathname
+  try {
+    const url = new URL(req.url || '/', 'http://localhost')
+    pathname = decodeURIComponent(url.pathname)
+    if (pathname.includes('\0')) throw new Error('invalid path')
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'text/plain' })
+    res.end('Bad Request')
+    return
+  }
 
-  if (pathname.startsWith('/repo')) {
+  if (pathname === '/repo' || pathname.startsWith('/repo/')) {
     pathname = pathname.slice(5)
   }
   if (!pathname || pathname === '/') {
@@ -63,6 +71,7 @@ const server = createServer(async (req, res) => {
 })
 
 server.listen(port, host, () => {
+  const port = server.address().port
   console.log(`Plugin repository serving on http://${host}:${port}`)
   console.log(`Accessible at:`)
   console.log(`  - http://127.0.0.1:${port}/`)

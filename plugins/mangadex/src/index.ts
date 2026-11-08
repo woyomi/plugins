@@ -30,7 +30,7 @@ const registration: PluginRegistration = {
   manifest: {
     id: 'mangadex',
     name: 'MangaDex',
-    version: '0.1.0',
+    version: '0.1.1',
     apiVersion: API_VERSION,
     lang: 'en',
     description: 'MangaDex — manga source (one source per language)',

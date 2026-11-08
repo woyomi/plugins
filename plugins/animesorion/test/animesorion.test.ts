@@ -231,6 +231,7 @@ describe('animesorion source', () => {
     ])
     expect(res.items[0]?.title).toBe('Boruto: Naruto Next Generations')
     expect(res.items[0]?.type).toBe('anime')
+    expect(res.items[1]?.type).toBe('movie')
     expect(res.items[0]?.id).toBe('animesorion/boruto-naruto-next-generations')
     expect(res.items[0]?.coverUrl).toContain('n4OLeeHqP4tpdvDxiloV65N6M5h.jpg')
     expect(res.hasNextPage).toBe(false)
@@ -264,6 +265,12 @@ describe('animesorion source', () => {
   })
 
   it('returns a single pseudo-episode for movie pages (the player lives on the page)', async () => {
+    const media = await animesorion.getMedia(
+      { ...ctx, fetch: fixtureFetch({ 'filmes/jujutsu-kaisen-0-o-filme': MOVIE_HTML }) },
+      'filme:jujutsu-kaisen-0-o-filme'
+    )
+    expect(media.type).toBe('movie')
+    expect(animesorion.mediaTypes).toContain('movie')
     const eps = await animesorion.getEpisodes(
       { ...ctx, fetch: fixtureFetch({ 'filmes/jujutsu-kaisen-0-o-filme': MOVIE_HTML }) },
       'filme:jujutsu-kaisen-0-o-filme'
@@ -347,6 +354,7 @@ describe('animesorion source', () => {
     expect(ultimos.items.map((m) => m.mediaId)).toEqual(['digimon-9-beatbreak'])
     const filmes = await animesorion.getHomeSection!({ ...ctx, fetch }, 'filmes', 1)
     expect(filmes.items.map((m) => m.mediaId)).toEqual(['filme:kaijuu-8-gou-kaiju-no-8-filme'])
+    expect(filmes.items[0]?.type).toBe('movie')
   })
 
   it('rejects unknown home sections', async () => {

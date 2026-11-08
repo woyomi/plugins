@@ -94,7 +94,7 @@ function mapSearchCard(item: Element): Media {
     mediaId,
     sourceId,
     title: text(link) ?? text(item.querySelector('img')) ?? 'Untitled',
-    type: 'anime',
+    type: mediaId.startsWith('filme:') ? 'movie' : 'anime',
     coverUrl: item.querySelector<HTMLImageElement>('.image img')?.getAttribute('src') ?? undefined
   }
 }
@@ -108,7 +108,7 @@ function mapHomeCard(article: Element): Media {
     mediaId,
     sourceId,
     title: text(link) ?? text(article.querySelector('img')) ?? 'Untitled',
-    type: 'anime',
+    type: mediaId.startsWith('filme:') ? 'movie' : 'anime',
     coverUrl: article.querySelector<HTMLImageElement>('.poster img')?.getAttribute('src') ?? undefined
   }
 }
@@ -272,7 +272,7 @@ export function makeAnimesOrionSource(): Source {
   return {
     id: sourceId,
     name: 'Animes Orion',
-    mediaTypes: ['anime'],
+    mediaTypes: ['anime', 'movie'],
     lang: 'pt-br',
 
     async search(ctx, query, page): Promise<SearchResults> {
@@ -288,7 +288,7 @@ export function makeAnimesOrionSource(): Source {
         id: `${sourceId}/${mediaId}`,
         mediaId,
         sourceId,
-        type: 'anime',
+        type: mediaId.startsWith('filme:') ? 'movie' : 'anime',
         title: text(doc.querySelector('.sheader .data h1')) ?? 'Untitled',
         coverUrl: doc.querySelector<HTMLImageElement>('.sheader .poster img')?.getAttribute('src') ?? undefined,
         synopsis: synopsisText(doc.querySelector('#info .wp-content')),

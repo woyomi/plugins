@@ -17,6 +17,11 @@ plugins/mugiwaras       Mugiwaras (manga, pt-BR)
 plugins/mangadex        MangaDex (manga, multi-language; official public API)
 plugins/comick          Comick (manga, multi-language)
 plugins/tsundoku        Tsundoku Traduções (manga + novel, pt-BR)
+plugins/weebcentral     Weeb Central (manga, en)
+plugins/mangakatana     MangaKatana (manga, en)
+plugins/manhastro       Manhastro (manga, pt-BR)
+plugins/mangapill       MangaPill (manga, en)
+plugins/fliptru         Fliptru (independent comics, pt-BR)
 scripts/build-repo.mjs  merges all plugin dists into repo/
 ```
 
@@ -31,8 +36,25 @@ Requires Node >= 22 and pnpm 11.8.0.
 pnpm install
 pnpm build      # build every plugin -> plugins/<name>/dist (IIFE + manifest + sha256)
 pnpm test       # unit tests (offline, inline fixtures)
+pnpm test:live  # opt-in live bundle/Engine smoke checks; requires build:repo first
 pnpm build:repo       # build all + merge dists into repo/ (index.json + bundles)
 ```
+
+To compare the bundles against a local woyomi checkout instead of the published
+SDK, build that checkout and run:
+
+```sh
+WOYOMI_CORE=../woyomi/packages/core/dist/index.js pnpm test:live
+```
+
+The live smoke checks validate bundle hashes, search, the first home section,
+details, episodes, and content resolution for every source. Engine comparisons
+replay responses fetched by the direct checks to avoid doubling upstream traffic.
+They do not prove video playback or image availability. `PLUGINS` (comma-separated
+plugin IDs), `QUERY`, and `REPORT` (JSON output path) can narrow or record a run.
+An empty chapter list for the sampled title is reported as a failure to verify
+content, not necessarily a broken extension. DOM-rendered requests require native
+testing; the Node harness does not emulate them.
 
 ## Distributing
 

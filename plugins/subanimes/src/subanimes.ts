@@ -3,7 +3,6 @@ import { fetchHtml, fetchJson } from '@woyomi/core'
 
 const BASE = 'https://subanimes.org'
 /** Host backing the embedded player: /player/index.php?data=<hex> -> /hls/<hex>/master.txt. */
-const HLS_HOST = 'https://00000410.xyz'
 const sourceId = 'subanimes'
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
@@ -59,6 +58,7 @@ interface SearchApiResponse {
 interface PlayerVariant {
   /** the `data=<32 hex>` token identifying the stream on the HLS host */
   data: string
+  origin: string
   /** raw button text, e.g. "DUBLADO" */
   label: string
 }
@@ -98,8 +98,8 @@ function mapSearchItem(item: SearchItem): Media | undefined {
 /** The status box carries the state as a modifier class: `status-box status-completed`. */
 function mapStatusBox(el: Element | null | undefined): Media['status'] {
   const cls = el?.getAttribute('class') ?? ''
-  if (/\bstatus-completed\b/.test(cls)) return 'completed'
-  if (/\bstatus-airing\b/.test(cls)) return 'ongoing'
+  if (/\b(?:status-completed|completed)\b/.test(cls)) return 'completed'
+  if (/\b(?:status-airing|airing)\b/.test(cls)) return 'ongoing'
   return undefined
 }
 
@@ -120,6 +120,18 @@ function mapSliderCard(a: Element): Media {
 function playerData(playerUrl: string | null | undefined): string | undefined {
   const data = playerUrl ? /[?&]data=([0-9a-fA-F]+)/.exec(playerUrl)?.[1] : undefined
   return data || undefined
+}
+
+function playerVariant(playerUrl: string | null | undefined, label: string): PlayerVariant | undefined {
+  const data = playerData(playerUrl)
+  if (!data || !playerUrl) return undefined
+  try {
+    const url = new URL(playerUrl, BASE)
+    if (!['https:', 'http:'].includes(url.protocol)) return undefined
+    return { data, origin: url.origin, label }
+  } catch {
+    return undefined
+  }
 }
 
 function playerLabel(type: number | undefined): string {
@@ -146,10 +158,10 @@ function scriptPlayerVariants(html: string, episode: Episode): PlayerVariant[] {
   const variants: PlayerVariant[] = []
   const seen = new Set<string>()
   for (const player of current?.players ?? []) {
-    const data = playerData(player.url)
-    if (!data || seen.has(data)) continue
-    seen.add(data)
-    variants.push({ data, label: playerLabel(player.type) })
+    const variant = playerVariant(player.url, playerLabel(player.type))
+    if (!variant || seen.has(`${variant.origin}/${variant.data}`)) continue
+    seen.add(`${variant.origin}/${variant.data}`)
+    variants.push(variant)
   }
   return variants
 }
@@ -165,20 +177,20 @@ function extractPlayerVariants(html: string, episode: Episode): PlayerVariant[] 
   // Current pages (2026-09) expose the players as `data-player-url` (+
   // `data-player-label`) attributes on the tab/modal elements.
   for (const el of Array.from(doc.querySelectorAll<HTMLElement>('[data-player-url]'))) {
-    const data = playerData(el.getAttribute('data-player-url'))
-    if (!data || seen.has(data)) continue
-    seen.add(data)
-    variants.push({ data, label: el.getAttribute('data-player-label')?.trim() || text(el) || '' })
+    const variant = playerVariant(el.getAttribute('data-player-url'), el.getAttribute('data-player-label')?.trim() || text(el) || '')
+    if (!variant || seen.has(`${variant.origin}/${variant.data}`)) continue
+    seen.add(`${variant.origin}/${variant.data}`)
+    variants.push(variant)
   }
   if (variants.length > 0) return variants
 
   // Legacy pages: onclick="switchPlayer(this, 'https://.../player/index.php?data=<32hex>')"
   for (const btn of Array.from(doc.querySelectorAll<HTMLElement>('button.player-tab-btn'))) {
     const playerUrl = /switchPlayer\(\s*this\s*,\s*'([^']+)'\s*\)/.exec(btn.getAttribute('onclick') ?? '')?.[1]
-    const data = playerData(playerUrl)
-    if (!data || seen.has(data)) continue
-    seen.add(data)
-    variants.push({ data, label: text(btn) ?? '' })
+    const variant = playerVariant(playerUrl, text(btn) ?? '')
+    if (!variant || seen.has(`${variant.origin}/${variant.data}`)) continue
+    seen.add(`${variant.origin}/${variant.data}`)
+    variants.push(variant)
   }
   return variants
 }
@@ -190,7 +202,7 @@ interface MasterPlaylist {
 }
 
 /** First #EXT-X-STREAM-INF variant of a master playlist: its RESOLUTION and the URL on the next line. */
-function parseMasterPlaylist(body: string): MasterPlaylist | undefined {
+function parseMasterPlaylist(body: string, masterUrl: string): MasterPlaylist | undefined {
   const lines = body.split(/\r?\n/)
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i] ?? ''
@@ -200,7 +212,7 @@ function parseMasterPlaylist(body: string): MasterPlaylist | undefined {
       const url = (lines[j] ?? '').trim()
       if (!url || url.startsWith('#')) continue
       // the site always emits absolute /m3/ URLs; keep a relative fallback anyway
-      const absolute = /^https?:\/\//.test(url) ? url : `${HLS_HOST}${url.startsWith('/') ? '' : '/'}${url}`
+      const absolute = new URL(url, masterUrl).href
       const parsedHeight = height ? Number.parseInt(height, 10) : undefined
       return { url: absolute, height: Number.isFinite(parsedHeight) ? parsedHeight : undefined }
     }
@@ -214,6 +226,10 @@ const HOME_SECTION_SLIDERS: Record<string, string> = {
   novos: 'slider-novos',
   completos: 'slider-completos',
   populares: 'slider-populares'
+}
+
+const HOME_SECTION_CONTAINERS: Record<string, string> = {
+  'lanca-hoje': 'release', novos: 'new-animes', completos: 'completed', populares: 'hype'
 }
 
 export function makeSubanimesSource(): Source {
@@ -244,11 +260,11 @@ export function makeSubanimesSource(): Source {
         mediaId,
         sourceId,
         type: 'anime',
-        title: text(doc.querySelector<HTMLElement>('.anime-header-bar h1')) ?? 'Untitled',
-        coverUrl: doc.querySelector<HTMLImageElement>('.poster-holder img.stupidPoster')?.getAttribute('src') ?? undefined,
-        synopsis: text(doc.querySelector<HTMLElement>('.synopsis-box .desc')),
-        status: mapStatusBox(doc.querySelector<HTMLElement>('.status-box')),
-        tags: Array.from(doc.querySelectorAll<HTMLElement>('.genres-row .genre-tag'))
+        title: text(doc.querySelector<HTMLElement>('.anime-header-bar h1')) ?? text(doc.querySelector('.page_title h1'))?.replace(/^Assistir\s+|\s+Online$/g, '') ?? 'Untitled',
+        coverUrl: doc.querySelector<HTMLImageElement>('.poster-holder img.stupidPoster, .animeImg img')?.getAttribute('src') ?? undefined,
+        synopsis: text(doc.querySelector<HTMLElement>('.synopsis-box .desc, .sinopse_content')),
+        status: mapStatusBox(doc.querySelector<HTMLElement>('.status-box, .anime_status')),
+        tags: Array.from(doc.querySelectorAll<HTMLElement>('.genres-row .genre-tag, .genders_container span'))
           .map((el) => el.textContent?.trim() ?? '')
           .filter(Boolean)
       }
@@ -298,13 +314,13 @@ export function makeSubanimesSource(): Source {
         // master.txt points at the real /m3/<token> URL
         let master: string
         try {
-          const res = await ctx.fetch(`${HLS_HOST}/hls/${variant.data}/master.txt`, { headers: HLS_HEADERS })
+          const res = await ctx.fetch(`${variant.origin}/hls/${variant.data}/master.txt`, { headers: HLS_HEADERS })
           if (res.status < 200 || res.status >= 300) continue
           master = res.body
         } catch {
           continue // a dead variant must not sink the whole episode
         }
-        const parsed = parseMasterPlaylist(master)
+        const parsed = parseMasterPlaylist(master, `${variant.origin}/hls/${variant.data}/master.txt`)
         if (!parsed) continue
         // Each variant is one audio version; declare it structurally so the host
         // builds an audio menu instead of parsing the quality label.
@@ -342,7 +358,17 @@ export function makeSubanimesSource(): Source {
       // the sliders are homepage-only; there is no pagination behind them
       if (page > 1) return { page, hasNextPage: false, items: [] }
       const doc = parseHtml(await fetchHtml(ctx.fetch, `${BASE}/`))
-      const items = Array.from(doc.querySelectorAll<HTMLAnchorElement>(`#${sliderId} a.homeSlider-item`)).map(mapSliderCard)
+      const legacy = Array.from(doc.querySelectorAll<HTMLAnchorElement>(`#${sliderId} a.homeSlider-item`)).map(mapSliderCard)
+      const current = Array.from(doc.querySelectorAll(`#${HOME_SECTION_CONTAINERS[sectionId]} .aniItem a[href]`)).map((a): Media => {
+        const mediaId = slugFromHref(a.getAttribute('href') ?? '')
+        const img = a.querySelector('img')
+        return {
+          id: `${sourceId}/${mediaId}`, mediaId, sourceId, type: 'anime',
+          title: text(a.querySelector('.aniTitulo')) ?? a.getAttribute('title') ?? 'Untitled',
+          coverUrl: img?.getAttribute('data-src') || img?.getAttribute('src') || undefined
+        }
+      })
+      const items = (legacy.length ? legacy : current).filter((m) => m.mediaId)
       return { page, hasNextPage: false, items }
     }
   }

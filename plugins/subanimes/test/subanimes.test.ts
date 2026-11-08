@@ -7,6 +7,32 @@ import type { FetchFn, FetchResult } from '@woyomi/core'
 
 const subanimes = makeSubanimesSource()
 
+describe('current SubAnimes layout', () => {
+  it('parses metadata from the current detail layout', async () => {
+    const html = '<section class="page_title"><h1>Assistir Test Anime Online</h1></section><div class="animeImg"><img src="https://example.org/cover.webp"></div><div class="anime_status airing"></div><div class="sinopse_content">Synopsis</div><div class="genders_container"><span>Action</span></div>'
+    const media = await subanimes.getMedia({ ...ctx, fetch: fixtureFetch({ '/anime/test': html }) }, 'test')
+    expect(media).toMatchObject({ title: 'Test Anime', status: 'ongoing', synopsis: 'Synopsis', tags: ['Action'], coverUrl: 'https://example.org/cover.webp' })
+  })
+  it('uses the player origin from the page after CDN migrations', async () => {
+    const calls: string[] = []
+    const fetch: FetchFn = async (url) => {
+      calls.push(url)
+      return { status: 200, headers: {}, body: url.includes('/ep/')
+        ? '<div data-player-url="https://00000221.xyz/player/index.php?data=abcdef" data-player-label="LEGENDADO"></div>'
+        : '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=100,RESOLUTION=1280x720\n../../m3/token' }
+    }
+    const streams = await subanimes.getStreams!({ ...ctx, fetch }, { id: 'subanimes/test', mediaId: 'test', sourceId: 'subanimes', title: 'Test', type: 'anime' }, { id: 'test/1', mediaId: 'test', number: 1 })
+    expect(calls[1]).toBe('https://00000221.xyz/hls/abcdef/master.txt')
+    expect(streams[0]).toMatchObject({ url: 'https://00000221.xyz/m3/token', audio: 'Legendado', quality: '720p' })
+  })
+
+  it('parses the current homepage containers and card markup', async () => {
+    const html = '<div id="release"><div class="aniItem"><a href="/anime/test"><div class="aniItemImg"><img src="https://example.org/cover.webp"></div><h2 class="aniTitulo">Test Anime</h2></a></div></div>'
+    const result = await subanimes.getHomeSection!({ ...ctx, fetch: fixtureFetch({ 'subanimes.org/': html }) }, 'lanca-hoje', 1)
+    expect(result.items).toMatchObject([{ mediaId: 'test', title: 'Test Anime', coverUrl: 'https://example.org/cover.webp' }])
+  })
+})
+
 // Real shapes captured from the live site (2026-08); trimmed to the relevant parts.
 const SEARCH_JSON = JSON.stringify({
   status: 'success',
